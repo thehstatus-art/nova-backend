@@ -133,9 +133,14 @@ app.post(
 /* ======================
    Get All Orders (Admin)
 ====================== */
-app.get("/api/orders", async (req, res) => {
-  const orders = await Order.find().sort({ createdAt: -1 });
-  res.json(orders);
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) {
+    console.error("Products error:", err);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
 });
 
 /* ======================
