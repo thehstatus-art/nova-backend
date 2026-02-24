@@ -3,6 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const Stripe = require("stripe");
+const path = require("path");
 
 const app = express();
 
@@ -11,6 +12,13 @@ const app = express();
 ====================== */
 app.use(cors());
 app.use(express.json());
+
+// ✅ SERVE UPLOADS FOLDER (STATIC FILES)
+const uploadsPath = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(uploadsPath));
+
+// 🔎 DEBUG CONFIRMATION
+console.log("🔥 Uploads folder active at:", uploadsPath);
 
 /* ======================
    MongoDB Connection
@@ -45,9 +53,7 @@ app.get("/api/health", (req, res) => {
   res.json({ message: "API is running" });
 });
 
-/* ======================
-   GET ALL PRODUCTS
-====================== */
+// GET ALL PRODUCTS
 app.get("/api/products", async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
@@ -58,9 +64,7 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
-/* ======================
-   Stripe Checkout Route
-====================== */
+// Stripe Checkout Route
 app.post("/api/stripe/create-checkout-session", async (req, res) => {
   try {
     const { cartItems } = req.body;
@@ -71,9 +75,7 @@ app.post("/api/stripe/create-checkout-session", async (req, res) => {
       line_items: cartItems.map((item) => ({
         price_data: {
           currency: "usd",
-          product_data: {
-            name: item.name,
-          },
+          product_data: { name: item.name },
           unit_amount: Math.round(item.price * 100),
         },
         quantity: item.quantity,
@@ -92,9 +94,7 @@ app.post("/api/stripe/create-checkout-session", async (req, res) => {
   }
 });
 
-/* ======================
-   Stripe Webhook
-====================== */
+// Stripe Webhook
 app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
@@ -130,17 +130,10 @@ app.post(
   }
 );
 
-/* ======================
-   Get All Orders (Admin)
-====================== */
-app.get("/api/products", async (req, res) => {
-  try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    res.json(products);
-  } catch (err) {
-    console.error("Products error:", err);
-    res.status(500).json({ error: "Failed to fetch products" });
-  }
+// Get All Orders
+app.get("/api/orders", async (req, res) => {
+  const orders = await Order.find().sort({ createdAt: -1 });
+  res.json(orders);
 });
 
 /* ======================
