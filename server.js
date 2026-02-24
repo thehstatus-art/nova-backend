@@ -26,9 +26,10 @@ mongoose
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ======================
-   Order Model
+   Models
 ====================== */
 const Order = require("./models/Order");
+const Product = require("./models/Product");
 
 /* ======================
    Routes
@@ -42,6 +43,19 @@ app.get("/", (req, res) => {
 // Health Route
 app.get("/api/health", (req, res) => {
   res.json({ message: "API is running" });
+});
+
+/* ======================
+   GET ALL PRODUCTS
+====================== */
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) {
+    console.error("Products error:", err);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
 });
 
 /* ======================
