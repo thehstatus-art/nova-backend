@@ -1,3 +1,57 @@
+app.post("/api/paypal/capture-order", async (req, res) => {
+  try {
+    const { orderID, cartItems } = req.body;
+
+    const request = new paypal.orders.OrdersCaptureRequest(orderID);
+    request.requestBody({});
+
+    const capture = await client().execute(request);
+
+    await Order.create({
+      email: capture.result.payer.email_address,
+      items: cartItems,
+      totalAmount:
+        capture.result.purchase_units[0].payments.captures[0].amount.value,
+      paypalOrderId: orderID,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("PayPal capture error:", err);
+    res.status(500).json({ error: "Capture failed" });
+  }
+});
+app.post("/api/paypal/create-order", async (req, res) => {
+  try {
+    const { cartItems } = req.body;
+
+    const total = cartItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    const request = new paypal.orders.OrdersCreateRequest();
+
+    request.requestBody({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          amount: {
+            currency_code: "USD",
+            value: total.toFixed(2),
+          },
+        },
+      ],
+    });
+
+    const order = await client().execute(request);
+
+    res.json({ id: order.result.id });
+  } catch (err) {
+    console.error("PayPal create error:", err);
+    res.status(500).json({ error: "PayPal create failed" });
+  }
+});
 require("dotenv").config();
 
 const express = require("express");
@@ -6,11 +60,23 @@ const cors = require("cors");
 const Stripe = require("stripe");
 const path = require("path");
 
-const {
-  PayPalHttpClient,
-  LiveEnvironment,
-  OrdersController,
-} = require("@paypal/paypal-server-sdk");
+
+const paypal = require("@paypal/checkout-server-sdk");
+
+/* ======================
+   PayPal Setup
+====================== */
+
+function environment() {
+  return new paypal.core.LiveEnvironment(
+    process.env.PAYPAL_CLIENT_ID,
+    process.env.PAYPAL_SECRET
+  );
+}
+
+function client() {
+  return new paypal.core.PayPalHttpClient(environment());
+}
 
 const app = express();
 
