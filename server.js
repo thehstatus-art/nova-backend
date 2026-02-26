@@ -1,3 +1,48 @@
+app.post("/api/paypal/create-order", async (req, res) => {
+  try {
+    const { cartItems } = req.body;
+
+    const total = cartItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    const order = await ordersController.createOrder({
+      body: {
+        intent: "CAPTURE",
+        purchase_units: [
+          {
+            amount: {
+              currency_code: "USD",
+              value: total.toFixed(2),
+            },
+          },
+        ],
+      },
+    });
+
+    res.json({ id: order.result.id });
+  } catch (err) {
+    console.error("PayPal create error:", err);
+    res.status(500).json({ error: "PayPal create failed" });
+  }
+});
+const {
+  PayPalHttpClient,
+  LiveEnvironment,
+  OrdersController,
+} = require("@paypal/paypal-server-sdk");
+/* ======================
+   PayPal Setup
+====================== */
+
+const environment = new LiveEnvironment(
+  process.env.PAYPAL_CLIENT_ID,
+  process.env.PAYPAL_SECRET
+);
+
+const paypalClient = new PayPalHttpClient(environment);
+const ordersController = new OrdersController(paypalClient);
 require("dotenv").config();
 
 const express = require("express");
