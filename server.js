@@ -107,13 +107,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 /* ======================
    PayPal Setup (LIVE)
 ====================== */
-const environment = new LiveEnvironment(
-  process.env.PAYPAL_CLIENT_ID,
-  process.env.PAYPAL_SECRET
-);
-
-const paypalClient = new PayPalHttpClient(environment);
-const ordersController = new OrdersController(paypalClient);
+const ordersController = new OrdersController(client());
 
 /* ======================
    Models
