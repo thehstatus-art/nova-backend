@@ -1,48 +1,3 @@
-app.post("/api/paypal/create-order", async (req, res) => {
-  try {
-    const { cartItems } = req.body;
-
-    const total = cartItems.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-
-    const order = await ordersController.createOrder({
-      body: {
-        intent: "CAPTURE",
-        purchase_units: [
-          {
-            amount: {
-              currency_code: "USD",
-              value: total.toFixed(2),
-            },
-          },
-        ],
-      },
-    });
-
-    res.json({ id: order.result.id });
-  } catch (err) {
-    console.error("PayPal create error:", err);
-    res.status(500).json({ error: "PayPal create failed" });
-  }
-});
-const {
-  PayPalHttpClient,
-  LiveEnvironment,
-  OrdersController,
-} = require("@paypal/paypal-server-sdk");
-/* ======================
-   PayPal Setup
-====================== */
-
-const environment = new LiveEnvironment(
-  process.env.PAYPAL_CLIENT_ID,
-  process.env.PAYPAL_SECRET
-);
-
-const paypalClient = new PayPalHttpClient(environment);
-const ordersController = new OrdersController(paypalClient);
 require("dotenv").config();
 
 const express = require("express");
@@ -50,7 +5,12 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const Stripe = require("stripe");
 const path = require("path");
-const paypal = require("@paypal/checkout-server-sdk");
+
+const {
+  PayPalHttpClient,
+  LiveEnvironment,
+  OrdersController,
+} = require("@paypal/paypal-server-sdk");
 
 const app = express();
 
@@ -60,14 +20,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve uploads folder
 const uploadsPath = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsPath));
 
 console.log("🔥 Uploads folder active at:", uploadsPath);
 
 /* ======================
-   Database Connection
+   Database
 ====================== */
 mongoose
   .connect(process.env.MONGODB_URI)
@@ -80,25 +39,21 @@ mongoose
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ======================
-   PayPal Setup
+   PayPal Setup (LIVE)
 ====================== */
+const environment = new LiveEnvironment(
+  process.env.PAYPAL_CLIENT_ID,
+  process.env.PAYPAL_SECRET
+);
+
+const paypalClient = new PayPalHttpClient(environment);
+const ordersController = new OrdersController(paypalClient);
 
 /* ======================
    Models
 ====================== */
 const Order = require("./models/Order");
 const Product = require("./models/Product");
-
-/* ======================
-   Route Files
-====================== */
-const adminRoutes = require("./routes/admin");
-const authRoutes = require("./routes/auth");
-const stripeRoutes = require("./routes/stripe");
-
-app.use("/api/admin", adminRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/stripe", stripeRoutes);
 
 /* ======================
    Basic Routes
@@ -108,7 +63,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ message: "API is running" });
+  res.json({ message: "API running" });
 });
 
 /* ======================
@@ -156,18 +111,67 @@ app.post("/api/stripe/create-checkout-session", async (req, res) => {
 /* ======================
    PayPal Create Order
 ====================== */
+app.post("/api/paypal/create-order", async (req, res) => {
+  try {
+    const { cartItems } = req.body;
+
+    const total = cartItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    const order = await ordersController.createOrder({
+      body: {
+        intent: "CAPTURE",
+        purchase_units: [
+          {
+            amount: {
+              currency_code: "USD",
+              value: total.toFixed(2),
+            },
+          },
+        ],
+      },
+    });
+
+    res.json({ id: order.result.id });
+  } catch (err) {
+    console.error("PayPal create error:", err);
+    res.status(500).json({ error: "PayPal create failed" });
+  }
+});
 
 /* ======================
    PayPal Capture
 ====================== */
+app.post("/api/paypal/capture-order", async (req, res) => {
+  try {
+    const { orderID, cartItems } = req.body;
+
+    const capture = await ordersController.captureOrder({
+      id: orderID,
+    });
+
+    await Order.create({
+      email: capture.result.payer.email_address,
+      items: cartItems,
+      totalAmount:
+        capture.result.purchase_units[0].payments.captures[0].amount.value,
+      paypalOrderId: orderID,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("PayPal capture error:", err);
+    res.status(500).json({ error: "Capture failed" });
+  }
+});
 
 /* ======================
-   Get Orders (Admin)
+   Admin Orders
 ====================== */
 app.get("/api/orders", async (req, res) => {
-  const adminKey = req.headers.authorization;
-
-  if (adminKey !== process.env.ADMIN_SECRET) {
+  if (req.headers.authorization !== process.env.ADMIN_SECRET) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
