@@ -5,7 +5,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const Stripe = require("stripe");
 const path = require("path");
-const paypal = require("@paypal/paypal-server-sdk");
+const paypal = require("@paypal/checkout-server-sdk");
 
 const app = express();
 
@@ -37,12 +37,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 /* ======================
    PayPal Setup
 ====================== */
-const paypalClient = new paypal.core.PayPalHttpClient(
-  new paypal.core.SandboxEnvironment(
-    process.env.PAYPAL_CLIENT_ID,
-    process.env.PAYPAL_SECRET
-  )
-);
 
 /* ======================
    Models
@@ -117,64 +111,10 @@ app.post("/api/stripe/create-checkout-session", async (req, res) => {
 /* ======================
    PayPal Create Order
 ====================== */
-app.post("/api/paypal/create-order", async (req, res) => {
-  try {
-    const { cartItems } = req.body;
-
-    const total = cartItems.reduce(
-      (acc, item) => acc + item.price * item.quantity,
-      0
-    );
-
-    const request = new paypal.orders.OrdersCreateRequest();
-
-    request.requestBody({
-      intent: "CAPTURE",
-      purchase_units: [
-        {
-          amount: {
-            currency_code: "USD",
-            value: total.toFixed(2),
-          },
-        },
-      ],
-    });
-
-    const order = await paypalClient.execute(request);
-
-    res.json({ id: order.result.id });
-  } catch (err) {
-    console.error("PayPal create error:", err);
-    res.status(500).json({ error: "PayPal order failed" });
-  }
-});
 
 /* ======================
    PayPal Capture
 ====================== */
-app.post("/api/paypal/capture-order", async (req, res) => {
-  try {
-    const { orderID, cartItems } = req.body;
-
-    const request = new paypal.orders.OrdersCaptureRequest(orderID);
-    request.requestBody({});
-
-    const capture = await paypalClient.execute(request);
-
-    await Order.create({
-      email: capture.result.payer.email_address,
-      items: cartItems,
-      totalAmount:
-        capture.result.purchase_units[0].amount.value,
-      paypalOrderId: orderID,
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("PayPal capture error:", err);
-    res.status(500).json({ error: "Capture failed" });
-  }
-});
 
 /* ======================
    Get Orders (Admin)
