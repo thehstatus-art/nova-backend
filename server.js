@@ -4,6 +4,11 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 import productRoutes from './routes/productRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
@@ -32,6 +37,9 @@ app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true
 }))
+
+// Serve uploaded images with absolute path
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 // Global Rate Limiter
 const globalLimiter = rateLimit({
