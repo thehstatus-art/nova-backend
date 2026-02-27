@@ -7,10 +7,14 @@ const router = express.Router()
 // CREATE PRODUCT (Admin Only)
 router.post('/', protect, isAdmin, async (req, res) => {
   try {
+    console.log("Incoming product:", req.body)
+
     const product = await Product.create(req.body)
+
     res.status(201).json(product)
   } catch (error) {
-    res.status(500).json({ message: 'Failed to create product' })
+    console.error("CREATE PRODUCT ERROR:", error)
+    res.status(500).json({ error: error.message })
   }
 })
 
