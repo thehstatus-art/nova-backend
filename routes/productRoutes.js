@@ -32,9 +32,9 @@ router.post('/:id/batch', protect, isAdmin, async (req, res) => {
       active: true
     }
 
-    // deactivate previous batches
-    product.batches.forEach(b => b.active = false)
+    if (!product.batches) product.batches = []
 
+    product.batches.forEach(b => b.active = false)
     product.batches.push(newBatch)
 
     await product.save()
@@ -43,6 +43,27 @@ router.post('/:id/batch', protect, isAdmin, async (req, res) => {
 
   } catch (error) {
     console.error("BATCH ERROR:", error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// UPDATE PRODUCT (Admin Only)
+router.put('/:id', protect, isAdmin, async (req, res) => {
+  try {
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    )
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+
+    res.json(product)
+
+  } catch (error) {
+    console.error("UPDATE ERROR:", error)
     res.status(500).json({ error: error.message })
   }
 })
