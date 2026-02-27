@@ -1,6 +1,6 @@
 import express from 'express'
 import Product from '../models/Product.js'
-import { protect, isAdmin } from '../middleware/authMiddleware.js'
+import { protect, isAdmin } from '../middleware/auth.js'
 
 const router = express.Router()
 
