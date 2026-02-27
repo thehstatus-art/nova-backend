@@ -1,25 +1,28 @@
 import mongoose from 'mongoose'
 
-const productSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  slug: { type: String, unique: true },
-  price: { type: Number, required: true },
-  stock: { type: Number, default: 0 },
-  specifications: {
-    purity: String,
+const batchSchema = new mongoose.Schema({
+  batchNumber: { type: String, required: true },
+  purity: { type: String },
+  manufacturedDate: { type: Date },
+  coaUrl: { type: String },
+  active: { type: Boolean, default: true }
+})
+
+const productSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    slug: { type: String, unique: true, required: true },
+    description: String,
+    price: { type: Number, required: true },
+    stock: { type: Number, default: 0 },
+    category: String,
+    image: String,
     molecularWeight: String,
-    molecularFormula: String,
-    casNumber: String,
-    form: String,
+    formula: String,
     storage: String,
-    appearance: String
+    batches: [batchSchema]
   },
-  batchNumber: {
-    type: String,
-    unique: true
-  },
-  testDate: Date,
-  coaUrl: String
-}, { timestamps: true })
+  { timestamps: true }
+)
 
 export default mongoose.model('Product', productSchema)
