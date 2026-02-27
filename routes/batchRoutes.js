@@ -1,27 +1,34 @@
-import express from 'express'
-import Product from '../models/Product.js'
-
 const router = express.Router()
 
+// Verify batch by batch number
 router.get('/:batchNumber', async (req, res) => {
   try {
+    const { batchNumber } = req.params
+
     const product = await Product.findOne({
-      batchNumber: req.params.batchNumber
+      'batches.batchNumber': batchNumber
     })
 
     if (!product) {
       return res.status(404).json({ message: 'Batch not found' })
     }
 
-    res.json({
-      productName: product.name,
-      purity: product.specifications.purity,
-      testDate: product.testDate,
-      coaUrl: product.coaUrl
+    const batch = product.batches.find(
+      b => b.batchNumber === batchNumber
+    )
+
+    return res.json({
+      product: product.name,
+      batchNumber: batch.batchNumber,
+      purity: batch.purity,
+      manufacturedDate: batch.manufacturedDate,
+      coaUrl: batch.coaUrl,
+      active: batch.active
     })
 
   } catch (error) {
-    res.status(500).json({ message: 'Server Error' })
+    console.error(error)
+    return res.status(500).json({ message: 'Server error' })
   }
 })
 
