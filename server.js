@@ -1,3 +1,14 @@
+import productRoutes from './routes/productRoutes.js';
+app.use('/api/products', productRoutes);
+import orderRoutes from './routes/orderRoutes.js';
+app.use('/api/orders', orderRoutes);
+const batchLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20
+});
+app.use('/api/batch', batchLimiter);
+import batchRoutes from './routes/batchRoutes.js';
+app.use('/api/batch', batchRoutes);
 app.use('/api/batch', rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 20
@@ -97,9 +108,21 @@ app.get("/api/admin/orders", protect || auth, protectAdmin || admin, async (req,
 /* ADMIN CREATE PRODUCT */
 app.post("/api/admin/products", auth, admin, async (req, res) => {
   try {
-    const product = await Product.create(req.body);
+    let body = { ...req.body };
+    // Auto-generate batchNumber if not provided
+    if (!body.batchNumber) {
+      // Example: NP-RET-2402-A
+      const BRAND = "NP"; // Change as needed
+      const PRODUCTCODE = (body.slug || body.name || "PROD").substring(0,3).toUpperCase();
+      const now = new Date();
+      const YEAR = String(now.getFullYear()).slice(-2);
+      const MONTH = (now.getMonth() + 1).toString().padStart(2, '0');
+      const LETTER = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+      body.batchNumber = `${BRAND}-${PRODUCTCODE}-${YEAR}${MONTH}-${LETTER}`;
+    }
+    const product = await Product.create(body);
     res.json(product);
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to create product" });
   }
 });
