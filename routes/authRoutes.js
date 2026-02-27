@@ -5,9 +5,7 @@ import User from '../models/User.js'
 
 const router = express.Router()
 
-// ======================
 // REGISTER
-// ======================
 router.post('/register', async (req, res) => {
   try {
     const { email, password, firstName, lastName } = req.body
@@ -35,9 +33,7 @@ router.post('/register', async (req, res) => {
   }
 })
 
-// ======================
 // LOGIN
-// ======================
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body
@@ -63,6 +59,10 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error(error)
     res.status(500).json({ message: 'Server error' })
+  }
+})
+
+export default router
   }
 })
 
