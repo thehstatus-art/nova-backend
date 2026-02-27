@@ -1,3 +1,4 @@
+import authRoutes from './routes/authRoutes.js';
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -51,6 +52,7 @@ app.use('/api/batch', batchLimiter)
 app.use('/api/products', productRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/batch', batchRoutes)
+app.use('/api/auth', authRoutes);
 
 /* ======================
    Admin Routes
