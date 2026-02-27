@@ -7,8 +7,12 @@ import dotenv from 'dotenv'
 
 import productRoutes from './routes/productRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
+import mongoose from 'mongoose'
 import batchRoutes from './routes/batchRoutes.js'
 
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('Mongo connection error:', err))
 import { protect, isAdmin } from './middleware/auth.js'
 import Order from './models/Order.js'
 import Product from './models/Product.js'
