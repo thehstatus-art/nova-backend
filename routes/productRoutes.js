@@ -7,13 +7,42 @@ const router = express.Router()
 // CREATE PRODUCT (Admin Only)
 router.post('/', protect, isAdmin, async (req, res) => {
   try {
-    console.log("Incoming product:", req.body)
-
     const product = await Product.create(req.body)
-
     res.status(201).json(product)
   } catch (error) {
     console.error("CREATE PRODUCT ERROR:", error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// ADD NEW BATCH TO PRODUCT (Admin Only)
+router.post('/:id/batch', protect, isAdmin, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+
+    const newBatch = {
+      batchNumber: req.body.batchNumber,
+      purity: req.body.purity,
+      manufacturedDate: req.body.manufacturedDate,
+      coaUrl: req.body.coaUrl,
+      active: true
+    }
+
+    // deactivate previous batches
+    product.batches.forEach(b => b.active = false)
+
+    product.batches.push(newBatch)
+
+    await product.save()
+
+    res.status(201).json(product)
+
+  } catch (error) {
+    console.error("BATCH ERROR:", error)
     res.status(500).json({ error: error.message })
   }
 })
