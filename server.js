@@ -40,7 +40,6 @@ require("dotenv").config();
 
 const express = require("express");
 const mongoose = require("mongoose");
-const cors = require("cors");
 const Stripe = require("stripe");
 const path = require("path");
 const paypal = require("@paypal/checkout-server-sdk");
