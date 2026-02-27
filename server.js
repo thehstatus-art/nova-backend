@@ -1,3 +1,30 @@
+app.use('/api/batch', rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20
+}));
+// Login Route Rate Limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5
+});
+app.use('/api/auth/login', authLimiter);
+// Global Rate Limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per window
+});
+app.use(limiter);
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import cors from 'cors';
+// ...existing code...
+// ...existing code...
+const authRoutes = require("./routes/auth");
+app.use("/api/auth", authRoutes);
+console.log("CLIENT ID LENGTH:", process.env.PAYPAL_CLIENT_ID?.length);
+console.log("SECRET LENGTH:", process.env.PAYPAL_SECRET?.length);
+console.log("CLIENT ID START:", process.env.PAYPAL_CLIENT_ID?.slice(0,6));
+console.log("SECRET START:", process.env.PAYPAL_SECRET?.slice(0,6));
 require("dotenv").config();
 
 const express = require("express");
@@ -9,10 +36,15 @@ const paypal = require("@paypal/checkout-server-sdk");
 
 const app = express();
 
+
 /* ======================
-   Middleware
+  Security Middleware
 ====================== */
-app.use(cors());
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CLIENT_URL,
+  credentials: true
+}));
 app.use(express.json());
 
 const uploadsPath = path.join(__dirname, "uploads");
@@ -52,6 +84,35 @@ function client() {
 ====================== */
 const Order = require("./models/Order");
 const Product = require("./models/Product");
+const { auth, admin, protect, protectAdmin } = require("./middleware/auth");
+// Admin: Get all orders
+app.get("/api/admin/orders", protect || auth, protectAdmin || admin, async (req, res) => {
+  try {
+    const orders = await Order.find().sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch orders" });
+  }
+});
+/* ADMIN CREATE PRODUCT */
+app.post("/api/admin/products", auth, admin, async (req, res) => {
+  try {
+    const product = await Product.create(req.body);
+    res.json(product);
+  } catch {
+    res.status(500).json({ error: "Failed to create product" });
+  }
+});
+
+/* ADMIN DELETE PRODUCT */
+app.delete("/api/admin/products/:id", auth, admin, async (req, res) => {
+  try {
+    await Product.findByIdAndDelete(req.params.id);
+    res.json({ message: "Deleted" });
+  } catch {
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
 
 /* ======================
    Basic Routes
@@ -159,6 +220,11 @@ app.post("/api/paypal/capture-order", async (req, res) => {
         capture.result.purchase_units[0].payments.captures[0].amount.value,
       paypalOrderId: orderID,
     });
+
+    // Decrement stock for each product
+    for (const item of cartItems) {
+      await Product.findByIdAndUpdate(item._id, { $inc: { stock: -item.quantity } });
+    }
 
     res.json({ success: true });
   } catch (err) {

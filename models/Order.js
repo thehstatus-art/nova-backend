@@ -14,6 +14,10 @@ const orderSchema = new mongoose.Schema({
   ],
   totalAmount: Number,
   stripeSessionId: String,
+  orderStatus: {
+    type: String,
+    default: "Paid"
+  },
   createdAt: {
     type: Date,
     default: Date.now,
