@@ -1,3 +1,6 @@
+import express from 'express'
+import Product from '../models/Product.js'
+
 const router = express.Router()
 
 // Verify batch by batch number
