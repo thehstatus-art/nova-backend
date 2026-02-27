@@ -27,70 +27,51 @@ const limiter = rateLimit({
 app.use(limiter);
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import cors from 'cors';
-// ...existing code...
-// ...existing code...
-const authRoutes = require("./routes/auth");
-app.use("/api/auth", authRoutes);
-console.log("CLIENT ID LENGTH:", process.env.PAYPAL_CLIENT_ID?.length);
-console.log("SECRET LENGTH:", process.env.PAYPAL_SECRET?.length);
-console.log("CLIENT ID START:", process.env.PAYPAL_CLIENT_ID?.slice(0,6));
-console.log("SECRET START:", process.env.PAYPAL_SECRET?.slice(0,6));
-require("dotenv").config();
 
-const express = require("express");
-const mongoose = require("mongoose");
-const Stripe = require("stripe");
-const path = require("path");
-const paypal = require("@paypal/checkout-server-sdk");
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import dotenv from 'dotenv';
+
+import productRoutes from './routes/productRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';
+import batchRoutes from './routes/batchRoutes.js';
+
+dotenv.config();
 
 const app = express();
 
-
-/* ======================
-  Security Middleware
-====================== */
+// Middleware
+app.use(express.json());
 app.use(helmet());
 app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true
 }));
-app.use(express.json());
 
-const uploadsPath = path.join(__dirname, "uploads");
-app.use("/uploads", express.static(uploadsPath));
+// Rate limiter
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+app.use(limiter);
 
-console.log("🔥 Uploads folder active at:", uploadsPath);
+// Routes
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/batch', batchRoutes);
 
-/* ======================
-   MongoDB
-====================== */
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("Mongo error:", err));
+// Basic test route
+app.get('/', (req, res) => {
+  res.send('API running');
+});
 
-/* ======================
-   Stripe Setup
-====================== */
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-/* ======================
-   PayPal Setup
-====================== */
-function environment() {
-  return new paypal.core.LiveEnvironment(
-    process.env.PAYPAL_CLIENT_ID,
-    process.env.PAYPAL_SECRET
-  );
-}
-
-function client() {
-  return new paypal.core.PayPalHttpClient(environment());
-}
-
-/* ======================
-   Models
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Backend running on port ${PORT}`);
+});
 ====================== */
 const Order = require("./models/Order");
 const Product = require("./models/Product");
