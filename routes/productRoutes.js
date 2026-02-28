@@ -2,11 +2,11 @@ import express from 'express'
 import Product from '../models/Product.js'
 import { protect, isAdmin } from '../middleware/auth.js'
 import slugify from 'slugify'
+
 const router = express.Router()
 
 // CREATE PRODUCT (Admin Only)
 router.post('/', protect, isAdmin, async (req, res) => {
-  try {router.post('/', protect, isAdmin, async (req, res) => {
   try {
     const { name } = req.body
 
@@ -30,15 +30,8 @@ router.post('/', protect, isAdmin, async (req, res) => {
     res.status(500).json({ error: error.message })
   }
 })
-    const product = await Product.create(req.body)
-    res.status(201).json(product)
-  } catch (error) {
-    console.error("CREATE PRODUCT ERROR:", error)
-    res.status(500).json({ error: error.message })
-  }
-})
 
-// ADD NEW BATCH TO PRODUCT (Admin Only)
+// ADD NEW BATCH (Admin Only)
 router.post('/:id/batch', protect, isAdmin, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -55,21 +48,19 @@ router.post('/:id/batch', protect, isAdmin, async (req, res) => {
       active: true
     }
 
-    if (!product.batches) product.batches = []
-
     product.batches.forEach(b => b.active = false)
+
     product.batches.push(newBatch)
 
     await product.save()
 
     res.status(201).json(product)
-
   } catch (error) {
     console.error("BATCH ERROR:", error)
     res.status(500).json({ error: error.message })
   }
 })
-// UPDATE PRODUCT (Admin Only)
+
 // UPDATE PRODUCT (Admin Only)
 router.put('/:id', protect, isAdmin, async (req, res) => {
   try {
@@ -84,7 +75,6 @@ router.put('/:id', protect, isAdmin, async (req, res) => {
     await product.save()
 
     res.json(product)
-
   } catch (error) {
     console.error("UPDATE ERROR:", error)
     res.status(500).json({ error: error.message })
@@ -105,6 +95,7 @@ router.get('/:slug', async (req, res) => {
     return res.status(404).json({ message: 'Product not found' })
   }
 
-  res.json(product
-nano routes/productRoutes.js
+  res.json(product)
+})
 
+export default router
