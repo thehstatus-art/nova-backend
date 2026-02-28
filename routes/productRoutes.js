@@ -1,12 +1,35 @@
 import express from 'express'
 import Product from '../models/Product.js'
 import { protect, isAdmin } from '../middleware/auth.js'
-
+import slugify from 'slugify'
 const router = express.Router()
 
 // CREATE PRODUCT (Admin Only)
 router.post('/', protect, isAdmin, async (req, res) => {
+  try {router.post('/', protect, isAdmin, async (req, res) => {
   try {
+    const { name } = req.body
+
+    if (!name) {
+      return res.status(400).json({ error: "Product name is required" })
+    }
+
+    const slug = slugify(name, {
+      lower: true,
+      strict: true
+    })
+
+    const product = await Product.create({
+      ...req.body,
+      slug
+    })
+
+    res.status(201).json(product)
+  } catch (error) {
+    console.error("CREATE PRODUCT ERROR:", error)
+    res.status(500).json({ error: error.message })
+  }
+})
     const product = await Product.create(req.body)
     res.status(201).json(product)
   } catch (error) {
@@ -83,5 +106,4 @@ router.get('/:slug', async (req, res) => {
     return res.status(404).json({ message: 'Product not found' })
   }
 
-  res.json(product)
-}
+  res.json(product
