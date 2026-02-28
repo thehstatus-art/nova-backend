@@ -6,11 +6,17 @@ import { protect } from '../middleware/auth.js'
 
 const router = express.Router()
 
+// Debug: Check if Stripe key exists
 if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY not set in environment')
+  console.error('❌ STRIPE_SECRET_KEY is NOT set')
+} else {
+  console.log('✅ Stripe key loaded')
 }
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+// Initialize Stripe safely
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: '2023-10-16'
+})
 
 /* =========================
    CREATE STRIPE CHECKOUT
@@ -18,6 +24,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
 router.post('/checkout', protect, async (req, res) => {
   try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({
+        message: 'Stripe secret key missing in environment'
+      })
+    }
+
     const { items } = req.body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -32,11 +44,15 @@ router.post('/checkout', protect, async (req, res) => {
       const product = await Product.findById(item.productId)
 
       if (!product) {
-        return res.status(404).json({ message: `Product not found: ${item.productId}` })
+        return res.status(404).json({
+          message: `Product not found: ${item.productId}`
+        })
       }
 
       if (product.stock < item.quantity) {
-        return res.status(400).json({ message: `Insufficient stock for ${product.name}` })
+        return res.status(400).json({
+          message: `Insufficient stock for ${product.name}`
+        })
       }
 
       const unitAmount = Math.round(product.price * 100)
@@ -66,8 +82,10 @@ router.post('/checkout', protect, async (req, res) => {
       payment_method_types: ['card'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/success`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/cancel`
+      success_url:
+        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/success`,
+      cancel_url:
+        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/cancel`
     })
 
     await Order.create({
@@ -75,14 +93,18 @@ router.post('/checkout', protect, async (req, res) => {
       items: orderItems,
       totalAmount,
       stripeSessionId: session.id,
-      isPaid: false
+      isPaid: false,
+      status: 'pending'
     })
 
     return res.status(200).json({ url: session.url })
 
   } catch (error) {
-    console.error('STRIPE CHECKOUT ERROR:', error)
-    return res.status(500).json({ message: 'Checkout failed', error: error.message })
+    console.error('🔥 STRIPE CHECKOUT ERROR:', error)
+    return res.status(500).json({
+      message: 'Checkout failed',
+      error: error.message
+    })
   }
 })
 
