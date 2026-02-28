@@ -69,9 +69,7 @@ router.post('/:id/batch', protect, isAdmin, async (req, res) => {
     res.status(500).json({ error: error.message })
   }
 })
-q
-/
-/ UPDATE PRODUCT (Admin Only)
+// UPDATE PRODUCT (Admin Only)
 router.put('/:id', protect, isAdmin, async (req, res) => {
   try {
     const product = await Product.findByIdAndUpdate(
@@ -107,3 +105,5 @@ router.get('/:slug', async (req, res) => {
   }
 
   res.json(product
+nano routes/productRoutes.js
+
