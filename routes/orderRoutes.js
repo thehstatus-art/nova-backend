@@ -1,11 +1,14 @@
 import express from 'express'
 import Stripe from 'stripe'
-import https from 'https'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import { protect } from '../middleware/auth.js'
 
 const router = express.Router()
+
+/* =========================
+   STRIPE INITIALIZATION
+========================= */
 
 if (!process.env.STRIPE_SECRET_KEY) {
   console.error('❌ STRIPE_SECRET_KEY is NOT set')
@@ -13,15 +16,10 @@ if (!process.env.STRIPE_SECRET_KEY) {
   console.log('✅ Stripe key loaded')
 }
 
-/* =========================
-   STRIPE INITIALIZATION
-========================= */
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2023-10-16',
-  maxNetworkRetries: 3,
-  timeout: 20000,
-  httpAgent: new https.Agent({ keepAlive: true })
+  maxNetworkRetries: 2,
+  timeout: 20000
 })
 
 /* =========================
@@ -82,8 +80,10 @@ router.post('/checkout', protect, async (req, res) => {
       payment_method_types: ['card'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/success`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/cancel`
+      success_url:
+        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/success`,
+      cancel_url:
+        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/cancel`
     })
 
     await Order.create({
@@ -95,14 +95,11 @@ router.post('/checkout', protect, async (req, res) => {
       status: 'pending'
     })
 
-    return res.status(200).json({ url: session.url })
+    res.json({ url: session.url })
 
   } catch (error) {
-    console.error('🔥 STRIPE ERROR TYPE:', error.type)
-    console.error('🔥 STRIPE ERROR CODE:', error.code)
-    console.error('🔥 STRIPE FULL ERROR:', error)
-
-    return res.status(500).json({
+    console.error('🔥 STRIPE ERROR:', error)
+    res.status(500).json({
       message: 'Checkout failed',
       error: error.message
     })
