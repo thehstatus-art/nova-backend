@@ -70,17 +70,18 @@ router.post('/:id/batch', protect, isAdmin, async (req, res) => {
   }
 })
 // UPDATE PRODUCT (Admin Only)
+// UPDATE PRODUCT (Admin Only)
 router.put('/:id', protect, isAdmin, async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    )
+    const product = await Product.findById(req.params.id)
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+
+    Object.assign(product, req.body)
+
+    await product.save()
 
     res.json(product)
 
