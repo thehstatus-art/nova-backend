@@ -1,36 +1,43 @@
-import authRoutes from './routes/authRoutes.js';
+import dotenv from 'dotenv'
+dotenv.config()
+
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
-import dotenv from 'dotenv'
+import mongoose from 'mongoose'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import uploadRoutes from './routes/uploadRoutes.js'
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
+import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
-import mongoose from 'mongoose'
 import batchRoutes from './routes/batchRoutes.js'
+import uploadRoutes from './routes/uploadRoutes.js'
+import webhookRoutes from './routes/webhookRoutes.js'
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('Mongo connection error:', err))
 import { protect, isAdmin } from './middleware/auth.js'
 import Order from './models/Order.js'
 import Product from './models/Product.js'
 
-dotenv.config()
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
+
+/* ======================
+   STRIPE WEBHOOK (MUST BE FIRST)
+====================== */
+
+app.use('/api/webhook', webhookRoutes)
 
 /* ======================
    Middleware
 ====================== */
 
+// JSON must come AFTER webhook
 app.use(express.json())
+
 app.use(helmet())
 
 app.use(cors({
@@ -38,10 +45,13 @@ app.use(cors({
   credentials: true
 }))
 
-// Serve uploaded images with absolute path
+// Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
-// Global Rate Limiter
+/* ======================
+   Rate Limiting
+====================== */
+
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100
@@ -49,7 +59,6 @@ const globalLimiter = rateLimit({
 
 app.use(globalLimiter)
 
-// Batch Route Rate Limiter
 const batchLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 20
@@ -58,14 +67,23 @@ const batchLimiter = rateLimit({
 app.use('/api/batch', batchLimiter)
 
 /* ======================
+   Database
+====================== */
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('Mongo connection error:', err))
+
+/* ======================
    Core Routes
 ====================== */
 
 app.use('/api/products', productRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/batch', batchRoutes)
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes)
 app.use('/api/upload', uploadRoutes)
+
 /* ======================
    Admin Routes
 ====================== */
