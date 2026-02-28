@@ -3,40 +3,26 @@ import mongoose from 'mongoose'
 const orderSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
   },
-
-  items: [
+  products: [
     {
       product: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Product'
       },
-      name: String,
-      batchNumber: String,
       quantity: Number,
-      price: Number
+      price: Number,
+      batchNumber: String
     }
   ],
-
-  shippingAddress: {
-    fullName: String,
-    address: String,
-    city: String,
-    state: String,
-    postalCode: String,
-    country: String
-  },
-
   totalAmount: Number,
-
-  status: {
-    type: String,
-    enum: ['pending', 'paid', 'shipped', 'cancelled'],
-    default: 'pending'
-  }
-
+  stripeSessionId: String,
+  isPaid: {
+    type: Boolean,
+    default: false
+  },
+  paidAt: Date
 }, { timestamps: true })
 
 export default mongoose.model('Order', orderSchema)
