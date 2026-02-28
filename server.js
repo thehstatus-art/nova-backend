@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
-
+import uploadRoutes from './routes/uploadRoutes.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -65,7 +65,7 @@ app.use('/api/products', productRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/batch', batchRoutes)
 app.use('/api/auth', authRoutes);
-
+app.use('/api/upload', uploadRoutes)
 /* ======================
    Admin Routes
 ====================== */
