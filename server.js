@@ -26,22 +26,34 @@ const __dirname = path.dirname(__filename)
 const app = express()
 
 /* ======================
+   DATABASE CONNECTION
+====================== */
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => {
+    console.error('Mongo connection error:', err)
+    process.exit(1)
+  })
+
+/* ======================
    STRIPE WEBHOOK (MUST BE FIRST)
 ====================== */
 
+// IMPORTANT: raw body parser for Stripe
 app.use('/api/webhook', webhookRoutes)
 
 /* ======================
-   Middleware
+   GLOBAL MIDDLEWARE
 ====================== */
 
-// JSON must come AFTER webhook
+// JSON parser AFTER webhook
 app.use(express.json())
 
 app.use(helmet())
 
 app.use(cors({
-  origin: process.env.CLIENT_URL,
+  origin: process.env.CLIENT_URL || '*',
   credentials: true
 }))
 
@@ -49,7 +61,7 @@ app.use(cors({
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 /* ======================
-   Rate Limiting
+   RATE LIMITING
 ====================== */
 
 const globalLimiter = rateLimit({
@@ -67,15 +79,7 @@ const batchLimiter = rateLimit({
 app.use('/api/batch', batchLimiter)
 
 /* ======================
-   Database
-====================== */
-
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('Mongo connection error:', err))
-
-/* ======================
-   Core Routes
+   CORE ROUTES
 ====================== */
 
 app.use('/api/products', productRoutes)
@@ -85,7 +89,11 @@ app.use('/api/auth', authRoutes)
 app.use('/api/upload', uploadRoutes)
 
 /* ======================
-   Admin Routes
+   ADMIN ROUTES
+====================== */
+
+/* ======================
+   ADMIN ROUTES
 ====================== */
 
 // Get All Orders
@@ -93,8 +101,50 @@ app.get('/api/admin/orders', protect, isAdmin, async (req, res) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 })
     res.json(orders)
-  } catch {
+  } catch (err) {
+    console.error(err)
     res.status(500).json({ message: 'Failed to fetch orders' })
+  }
+})
+
+// Admin Dashboard Stats
+app.get('/api/admin/stats', protect, isAdmin, async (req, res) => {
+  try {
+    const totalOrders = await Order.countDocuments()
+    const paidOrders = await Order.countDocuments({ isPaid: true })
+    const pendingOrders = await Order.countDocuments({ isPaid: false })
+
+    const revenueData = await Order.aggregate([
+      { $match: { isPaid: true } },
+      { $group: { _id: null, totalRevenue: { $sum: "$totalAmount" } } }
+    ])
+
+    const totalRevenue =
+      revenueData.length > 0 ? revenueData[0].totalRevenue : 0
+
+    const topProducts = await Order.aggregate([
+      { $match: { isPaid: true } },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.name",
+          totalSold: { $sum: "$items.quantity" }
+        }
+      },
+      { $sort: { totalSold: -1 } },
+      { $limit: 5 }
+    ])
+
+    res.json({
+      totalRevenue,
+      totalOrders,
+      paidOrders,
+      pendingOrders,
+      topProducts
+    })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: 'Failed to load stats' })
   }
 })
 
@@ -112,15 +162,17 @@ app.post('/api/admin/products', protect, isAdmin, async (req, res) => {
       const now = new Date()
       const YEAR = String(now.getFullYear()).slice(-2)
       const MONTH = (now.getMonth() + 1).toString().padStart(2, '0')
-      const LETTER = String.fromCharCode(65 + Math.floor(Math.random() * 26))
+      const LETTER = String.fromCharCode(
+        65 + Math.floor(Math.random() * 26)
+      )
 
       body.batchNumber = `${BRAND}-${PRODUCTCODE}-${YEAR}${MONTH}-${LETTER}`
     }
 
     const product = await Product.create(body)
     res.json(product)
-
-  } catch {
+  } catch (err) {
+    console.error(err)
     res.status(500).json({ error: 'Failed to create product' })
   }
 })
@@ -130,13 +182,13 @@ app.delete('/api/admin/products/:id', protect, isAdmin, async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id)
     res.json({ message: 'Deleted' })
-  } catch {
+  } catch (err) {
+    console.error(err)
     res.status(500).json({ error: 'Delete failed' })
   }
 })
-
 /* ======================
-   Health Routes
+   HEALTH ROUTES
 ====================== */
 
 app.get('/', (req, res) => {
@@ -148,7 +200,7 @@ app.get('/api/health', (req, res) => {
 })
 
 /* ======================
-   Start Server
+   START SERVER
 ====================== */
 
 const PORT = process.env.PORT || 5000
