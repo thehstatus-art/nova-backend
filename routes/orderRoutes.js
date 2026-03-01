@@ -14,12 +14,27 @@ if (!process.env.STRIPE_SECRET_KEY) {
   console.error('❌ STRIPE_SECRET_KEY is NOT set')
 } else {
   console.log('✅ Stripe key loaded')
+  console.log('🔎 Stripe key prefix:', process.env.STRIPE_SECRET_KEY.slice(0, 8))
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2023-10-16',
   maxNetworkRetries: 2,
   timeout: 20000
+})
+
+/* =========================
+   STRIPE CONNECTION TEST
+========================= */
+
+router.get('/stripe-test', async (req, res) => {
+  try {
+    const balance = await stripe.balance.retrieve()
+    res.json(balance)
+  } catch (error) {
+    console.error('🔥 STRIPE TEST ERROR:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
 /* =========================
@@ -98,7 +113,7 @@ router.post('/checkout', protect, async (req, res) => {
     res.json({ url: session.url })
 
   } catch (error) {
-    console.error('🔥 STRIPE ERROR:', error)
+    console.error('🔥 STRIPE CHECKOUT ERROR:', error)
     res.status(500).json({
       message: 'Checkout failed',
       error: error.message
