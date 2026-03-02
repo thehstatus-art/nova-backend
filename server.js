@@ -148,7 +148,7 @@ app.use(express.json())
    SECURITY + CORS
 ====================== */
 
-const cors = require("cors");
+
 
 app.use(
   cors({
