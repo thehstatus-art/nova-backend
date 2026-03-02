@@ -148,12 +148,19 @@ app.use(express.json())
    SECURITY + CORS
 ====================== */
 
-app.use(helmet())
+const cors = require("cors");
 
-app.use(cors({
-  origin: true,
-  credentials: true
-}))
+app.use(
+  cors({
+    origin: [
+      "https://www.novapeptidelabs.org",
+      "https://novapeptidelabs.org",
+      "http://localhost:3000"
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+  })
+);
 
 /* ======================
    RATE LIMITING
