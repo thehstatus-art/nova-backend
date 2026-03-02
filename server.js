@@ -2,23 +2,25 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 import express from 'express'
-import cors from 'cors'
-import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
 import mongoose from 'mongoose'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
+import Stripe from 'stripe'
 
 import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
 import batchRoutes from './routes/batchRoutes.js'
 import uploadRoutes from './routes/uploadRoutes.js'
-import webhookRoutes from './routes/webhookRoutes.js'
 
 import { protect, isAdmin } from './middleware/auth.js'
 import Order from './models/Order.js'
 import Product from './models/Product.js'
+import User from './models/User.js'
+import { sendOrderConfirmation } from './utils/sendEmail.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -29,7 +31,7 @@ const app = express()
    DATABASE CONNECTION
 ====================== */
 
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => {
     console.error('Mongo connection error:', err)
@@ -37,28 +39,121 @@ mongoose.connect(process.env.MONGO_URI)
   })
 
 /* ======================
-   STRIPE WEBHOOK (MUST BE FIRST)
+   🚨 STRIPE WEBHOOK
+   MUST BE BEFORE express.json()
 ====================== */
 
-// IMPORTANT: raw body parser for Stripe
-app.use('/api/webhook', webhookRoutes)
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.error('❌ STRIPE_SECRET_KEY missing')
+}
+
+if (!process.env.STRIPE_WEBHOOK_SECRET) {
+  console.error('❌ STRIPE_WEBHOOK_SECRET missing')
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: '2026-01-28.clover'
+})
+
+app.post(
+  '/api/webhook',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+
+    const sig = req.headers['stripe-signature']
+    if (!sig) {
+      return res.status(400).send('Missing Stripe signature')
+    }
+
+    let event
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      )
+    } catch (err) {
+      console.error('🔥 Stripe signature error:', err.message)
+      return res.status(400).send(`Webhook Error: ${err.message}`)
+    }
+
+    if (event.type !== 'checkout.session.completed') {
+      return res.status(200).json({ received: true })
+    }
+
+    try {
+      const session = event.data.object
+
+      const order = await Order.findOne({
+        stripeSessionId: session.id
+      })
+
+      if (!order) {
+        console.warn('⚠️ Order not found:', session.id)
+        return res.status(200).json({ received: true })
+      }
+
+      if (order.isPaid) {
+        console.log('⚠️ Order already processed:', order._id)
+        return res.status(200).json({ received: true })
+      }
+
+      // ✅ Mark as paid
+      order.isPaid = true
+      order.status = 'paid'
+      order.paidAt = new Date()
+      await order.save()
+
+      // 🔥 Reduce inventory safely
+      for (const item of order.items) {
+        const product = await Product.findById(item.product)
+        if (!product) continue
+        if (product.stock < item.quantity) continue
+
+        product.stock -= item.quantity
+        await product.save()
+      }
+
+      // 📧 Send confirmation email
+      const user = await User.findById(order.user)
+
+      if (user?.email) {
+        try {
+          await sendOrderConfirmation(order, user.email)
+          console.log('📧 Confirmation email sent to:', user.email)
+        } catch (err) {
+          console.error('❌ Email sending failed:', err.message)
+        }
+      }
+
+      console.log('✅ Order processed:', order._id)
+
+      return res.status(200).json({ received: true })
+
+    } catch (err) {
+      console.error('🔥 Webhook processing error:', err.message)
+      return res.status(500).send('Internal webhook error')
+    }
+  }
+)
 
 /* ======================
-   GLOBAL MIDDLEWARE
+   BODY PARSER (AFTER WEBHOOK)
 ====================== */
 
-// JSON parser AFTER webhook
 app.use(express.json())
+
+/* ======================
+   SECURITY + CORS
+====================== */
 
 app.use(helmet())
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || '*',
+  origin: true,
   credentials: true
 }))
-
-// Serve uploaded images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 /* ======================
    RATE LIMITING
@@ -71,15 +166,14 @@ const globalLimiter = rateLimit({
 
 app.use(globalLimiter)
 
-const batchLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 20
-})
+/* ======================
+   STATIC FILES
+====================== */
 
-app.use('/api/batch', batchLimiter)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 /* ======================
-   CORE ROUTES
+   ROUTES
 ====================== */
 
 app.use('/api/products', productRoutes)
@@ -92,22 +186,15 @@ app.use('/api/upload', uploadRoutes)
    ADMIN ROUTES
 ====================== */
 
-/* ======================
-   ADMIN ROUTES
-====================== */
-
-// Get All Orders
 app.get('/api/admin/orders', protect, isAdmin, async (req, res) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 })
     res.json(orders)
-  } catch (err) {
-    console.error(err)
+  } catch {
     res.status(500).json({ message: 'Failed to fetch orders' })
   }
 })
 
-// Admin Dashboard Stats
 app.get('/api/admin/stats', protect, isAdmin, async (req, res) => {
   try {
     const totalOrders = await Order.countDocuments()
@@ -122,73 +209,19 @@ app.get('/api/admin/stats', protect, isAdmin, async (req, res) => {
     const totalRevenue =
       revenueData.length > 0 ? revenueData[0].totalRevenue : 0
 
-    const topProducts = await Order.aggregate([
-      { $match: { isPaid: true } },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.name",
-          totalSold: { $sum: "$items.quantity" }
-        }
-      },
-      { $sort: { totalSold: -1 } },
-      { $limit: 5 }
-    ])
-
     res.json({
       totalRevenue,
       totalOrders,
       paidOrders,
-      pendingOrders,
-      topProducts
+      pendingOrders
     })
-  } catch (error) {
-    console.error(error)
+  } catch {
     res.status(500).json({ message: 'Failed to load stats' })
   }
 })
 
-// Admin Create Product
-app.post('/api/admin/products', protect, isAdmin, async (req, res) => {
-  try {
-    let body = { ...req.body }
-
-    if (!body.batchNumber) {
-      const BRAND = 'NP'
-      const PRODUCTCODE = (body.slug || body.name || 'PROD')
-        .substring(0, 3)
-        .toUpperCase()
-
-      const now = new Date()
-      const YEAR = String(now.getFullYear()).slice(-2)
-      const MONTH = (now.getMonth() + 1).toString().padStart(2, '0')
-      const LETTER = String.fromCharCode(
-        65 + Math.floor(Math.random() * 26)
-      )
-
-      body.batchNumber = `${BRAND}-${PRODUCTCODE}-${YEAR}${MONTH}-${LETTER}`
-    }
-
-    const product = await Product.create(body)
-    res.json(product)
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'Failed to create product' })
-  }
-})
-
-// Admin Delete Product
-app.delete('/api/admin/products/:id', protect, isAdmin, async (req, res) => {
-  try {
-    await Product.findByIdAndDelete(req.params.id)
-    res.json({ message: 'Deleted' })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'Delete failed' })
-  }
-})
 /* ======================
-   HEALTH ROUTES
+   HEALTH
 ====================== */
 
 app.get('/', (req, res) => {
@@ -203,7 +236,7 @@ app.get('/api/health', (req, res) => {
    START SERVER
 ====================== */
 
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5050
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`)

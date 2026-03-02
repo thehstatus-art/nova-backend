@@ -2,103 +2,76 @@ import express from 'express'
 import Stripe from 'stripe'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
-import { protect } from '../middleware/auth.js'
+import { protect, isAdmin } from '../middleware/auth.js'
 
 const router = express.Router()
 
-/* =========================
-   STRIPE INITIALIZATION
-========================= */
-
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error('❌ STRIPE_SECRET_KEY is NOT set')
-} else {
-  console.log('✅ Stripe key loaded')
-  console.log('🔎 Stripe key prefix:', process.env.STRIPE_SECRET_KEY.slice(0, 8))
-}
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2023-10-16',
-  maxNetworkRetries: 2,
-  timeout: 20000
-})
-
-/* =========================
-   STRIPE CONNECTION TEST
-========================= */
-
-router.get('/stripe-test', async (req, res) => {
-  try {
-    const balance = await stripe.balance.retrieve()
-    res.json(balance)
-  } catch (error) {
-    console.error('🔥 STRIPE TEST ERROR:', error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-/* =========================
-   CREATE STRIPE CHECKOUT
-========================= */
+/* =========================================
+   CHECKOUT ROUTE
+========================================= */
 
 router.post('/checkout', protect, async (req, res) => {
   try {
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ message: 'Stripe key missing' })
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2026-01-28.clover'
+    })
+
     const { items } = req.body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: 'No order items provided' })
+      return res.status(400).json({ message: 'No items provided' })
     }
 
-    let lineItems = []
-    let totalAmount = 0
+    let stripeLineItems = []
     let orderItems = []
+    let totalAmount = 0
 
     for (const item of items) {
+
       const product = await Product.findById(item.productId)
 
       if (!product) {
-        return res.status(404).json({
-          message: `Product not found: ${item.productId}`
-        })
+        return res.status(404).json({ message: 'Product not found' })
       }
 
       if (product.stock < item.quantity) {
         return res.status(400).json({
-          message: `Insufficient stock for ${product.name}`
+          message: `Not enough stock for ${product.name}`
         })
       }
 
       const unitAmount = Math.round(product.price * 100)
+      const subtotal = product.price * item.quantity
+      totalAmount += subtotal
 
-      lineItems.push({
+      stripeLineItems.push({
         price_data: {
           currency: 'usd',
-          product_data: {
-            name: product.name
-          },
+          product_data: { name: product.name },
           unit_amount: unitAmount
         },
         quantity: item.quantity
       })
 
-      totalAmount += product.price * item.quantity
-
       orderItems.push({
         product: product._id,
         name: product.name,
-        quantity: item.quantity,
-        price: product.price
+        price: product.price,
+        quantity: item.quantity
       })
     }
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: lineItems,
+      line_items: stripeLineItems,
       mode: 'payment',
-      success_url:
-        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/success`,
-      cancel_url:
-        `${process.env.FRONTEND_URL || 'http://localhost:3000'}/cancel`
+      success_url: 'http://localhost:3000/success',
+      cancel_url: 'http://localhost:3000/cancel'
     })
 
     await Order.create({
@@ -110,13 +83,93 @@ router.post('/checkout', protect, async (req, res) => {
       status: 'pending'
     })
 
-    res.json({ url: session.url })
+    return res.json({ url: session.url })
 
   } catch (error) {
-    console.error('🔥 STRIPE CHECKOUT ERROR:', error)
-    res.status(500).json({
-      message: 'Checkout failed',
-      error: error.message
+    console.error('🔥 Checkout error:', error)
+    return res.status(500).json({ message: 'Checkout failed' })
+  }
+})
+
+/* =========================================
+   REFUND ROUTE (ADMIN ONLY - SAFE)
+========================================= */
+
+router.post('/refund/:id', protect, isAdmin, async (req, res) => {
+  try {
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ message: 'Stripe key missing' })
+    }
+
+    const order = await Order.findById(req.params.id)
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' })
+    }
+
+    if (!order.isPaid) {
+      return res.status(400).json({ message: 'Order not paid' })
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2026-01-28.clover'
+    })
+
+    const session = await stripe.checkout.sessions.retrieve(
+      order.stripeSessionId,
+      { expand: ['payment_intent'] }
+    )
+
+    if (!session.payment_intent) {
+      return res.status(400).json({ message: 'Payment intent not found' })
+    }
+
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent.id
+
+    // 🔥 Try refund (safe)
+    try {
+      await stripe.refunds.create({
+        payment_intent: paymentIntentId
+      })
+
+      console.log('✅ Stripe refund created')
+
+    } catch (stripeError) {
+
+      if (stripeError.message.includes('already been refunded')) {
+        console.log('⚠️ Charge already refunded in Stripe')
+      } else {
+        throw stripeError
+      }
+    }
+
+    // 🔥 Restore inventory only if not already refunded in DB
+    if (order.status !== 'refunded') {
+
+      for (const item of order.items) {
+        const product = await Product.findById(item.product)
+        if (!product) continue
+
+        product.stock += item.quantity
+        await product.save()
+      }
+
+      order.status = 'refunded'
+      await order.save()
+    }
+
+    return res.json({ message: 'Refund successful (safe)' })
+
+  } catch (err) {
+    console.error('🔥 Refund error:', err.message)
+
+    return res.status(500).json({
+      message: 'Refund failed',
+      error: err.message
     })
   }
 })
