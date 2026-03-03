@@ -7,7 +7,7 @@ import { protect, isAdmin } from '../middleware/auth.js'
 const router = express.Router()
 
 /* =========================================
-   🔐 STRIPE INITIALIZATION (FINAL CLEAN VERSION)
+   🔐 STRIPE INITIALIZATION
 ========================================= */
 
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -15,7 +15,6 @@ if (!process.env.STRIPE_SECRET_KEY) {
   process.exit(1)
 }
 
-// Trim removes hidden newline/space issues
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 
 /* =========================================
@@ -67,14 +66,20 @@ router.post('/checkout', async (req, res) => {
       })
     }
 
+    // 🔥 Create Stripe Session WITH metadata
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: stripeLineItems,
       mode: 'payment',
-      success_url: 'https://novapeptidelabs.com/success',
-      cancel_url: 'https://novapeptidelabs.com/cancel'
+      success_url:
+        'https://novapeptidelabs.com/success?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: 'https://novapeptidelabs.com/cancel',
+      metadata: {
+        internal_reference: Date.now().toString()
+      }
     })
 
+    // Save order BEFORE payment
     await Order.create({
       items: orderItems,
       totalAmount,
@@ -88,6 +93,28 @@ router.post('/checkout', async (req, res) => {
   } catch (error) {
     console.error('🔥 Checkout error:', error)
     return res.status(500).json({ message: 'Checkout failed' })
+  }
+})
+
+/* =========================================
+   GET ORDER BY STRIPE SESSION (NEW)
+   Used by Success Page
+========================================= */
+
+router.get('/by-session/:sessionId', async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      stripeSessionId: req.params.sessionId
+    })
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' })
+    }
+
+    return res.json(order)
+
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch order' })
   }
 })
 
