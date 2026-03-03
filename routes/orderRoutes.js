@@ -17,7 +17,10 @@ router.post('/checkout', async (req, res) => {
       return res.status(500).json({ message: 'Stripe key missing' })
     }
 
-    // 🔥 FIXED: removed invalid apiVersion
+    // 🔎 DEBUG STRIPE KEY
+    console.log("Stripe key raw:", JSON.stringify(process.env.STRIPE_SECRET_KEY))
+    console.log("Stripe key length:", process.env.STRIPE_SECRET_KEY?.length)
+
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
     const { items } = req.body
@@ -98,7 +101,6 @@ router.post('/refund/:id', protect, isAdmin, async (req, res) => {
       return res.status(500).json({ message: 'Stripe key missing' })
     }
 
-    // 🔥 FIXED: removed invalid apiVersion
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
     const order = await Order.findById(req.params.id)
