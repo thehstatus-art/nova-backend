@@ -27,6 +27,9 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 
+// 🔥 REQUIRED FOR RENDER (fixes proxy warning)
+app.set('trust proxy', 1)
+
 /* ======================
    DATABASE CONNECTION
 ====================== */
@@ -39,23 +42,16 @@ mongoose.connect(process.env.MONGODB_URI)
   })
 
 /* ======================
-   STRIPE INIT (BASE64 SAFE)
+   STRIPE INIT (FINAL CLEAN)
 ====================== */
 
-if (!process.env.STRIPE_SECRET_KEY_BASE64) {
-  console.error('❌ STRIPE_SECRET_KEY_BASE64 missing')
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.error("❌ STRIPE_SECRET_KEY missing")
   process.exit(1)
 }
 
-if (!process.env.STRIPE_WEBHOOK_SECRET) {
-  console.error('❌ STRIPE_WEBHOOK_SECRET missing')
-}
-
-const decodedStripeKey = Buffer
-  .from(process.env.STRIPE_SECRET_KEY_BASE64, 'base64')
-  .toString('utf8')
-
-const stripe = new Stripe(decodedStripeKey)
+// trim() removes hidden newline/space issues
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 
 /* ======================
    🚨 STRIPE WEBHOOK
