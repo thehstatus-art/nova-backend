@@ -43,22 +43,25 @@ mongoose.connect(process.env.MONGODB_URI)
    MUST BE BEFORE express.json()
 ====================== */
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error('❌ STRIPE_SECRET_KEY missing')
+/* ======================
+   🚨 STRIPE WEBHOOK
+   MUST BE BEFORE express.json()
+====================== */
+
+if (!process.env.STRIPE_SECRET_KEY_BASE64) {
+  console.error('❌ STRIPE_SECRET_KEY_BASE64 missing')
+  process.exit(1)
 }
 
 if (!process.env.STRIPE_WEBHOOK_SECRET) {
   console.error('❌ STRIPE_WEBHOOK_SECRET missing')
 }
 
-const rawKey = process.env.STRIPE_SECRET_KEY
+const decodedStripeKey = Buffer
+  .from(process.env.STRIPE_SECRET_KEY_BASE64, 'base64')
+  .toString('utf8')
 
-console.log("Key chars:")
-for (let i = 0; i < rawKey.length; i++) {
-  console.log(i, rawKey.charCodeAt(i))
-}
-
-const stripe = new Stripe(rawKey.trim())
+const stripe = new Stripe(decodedStripeKey)
 
 app.post(
   '/api/webhook',
@@ -94,23 +97,15 @@ app.post(
         stripeSessionId: session.id
       })
 
-      if (!order) {
-        console.warn('⚠️ Order not found:', session.id)
+      if (!order || order.isPaid) {
         return res.status(200).json({ received: true })
       }
 
-      if (order.isPaid) {
-        console.log('⚠️ Order already processed:', order._id)
-        return res.status(200).json({ received: true })
-      }
-
-      // ✅ Mark as paid
       order.isPaid = true
       order.status = 'paid'
       order.paidAt = new Date()
       await order.save()
 
-      // 🔥 Reduce inventory safely
       for (const item of order.items) {
         const product = await Product.findById(item.product)
         if (!product) continue
@@ -118,18 +113,6 @@ app.post(
 
         product.stock -= item.quantity
         await product.save()
-      }
-
-      // 📧 Send confirmation email
-      const user = await User.findById(order.user)
-
-      if (user?.email) {
-        try {
-          await sendOrderConfirmation(order, user.email)
-          console.log('📧 Confirmation email sent to:', user.email)
-        } catch (err) {
-          console.error('❌ Email sending failed:', err.message)
-        }
       }
 
       console.log('✅ Order processed:', order._id)
@@ -142,12 +125,6 @@ app.post(
     }
   }
 )
-
-/* ======================
-   BODY PARSER (AFTER WEBHOOK)
-====================== */
-
-app.use(express.json())
 
 /* ======================
    SECURITY + CORS

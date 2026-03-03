@@ -7,22 +7,26 @@ import { protect, isAdmin } from '../middleware/auth.js'
 const router = express.Router()
 
 /* =========================================
+   🔐 STRIPE INITIALIZATION (BASE64 SAFE)
+========================================= */
+
+if (!process.env.STRIPE_SECRET_KEY_BASE64) {
+  console.error('❌ STRIPE_SECRET_KEY_BASE64 missing')
+  process.exit(1)
+}
+
+const decodedStripeKey = Buffer
+  .from(process.env.STRIPE_SECRET_KEY_BASE64, 'base64')
+  .toString('utf8')
+
+const stripe = new Stripe(decodedStripeKey)
+
+/* =========================================
    CHECKOUT ROUTE (PUBLIC)
 ========================================= */
 
 router.post('/checkout', async (req, res) => {
   try {
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.log("❌ STRIPE_SECRET_KEY missing")
-      return res.status(500).json({ message: 'Stripe key missing' })
-    }
-
-    // 🔎 DEBUG STRIPE KEY
-    console.log("Stripe key raw:", JSON.stringify(process.env.STRIPE_SECRET_KEY))
-    console.log("Stripe key length:", process.env.STRIPE_SECRET_KEY?.length)
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
-
     const { items } = req.body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -47,8 +51,7 @@ router.post('/checkout', async (req, res) => {
       }
 
       const unitAmount = Math.round(product.price * 100)
-      const subtotal = product.price * item.quantity
-      totalAmount += subtotal
+      totalAmount += product.price * item.quantity
 
       stripeLineItems.push({
         price_data: {
@@ -97,16 +100,6 @@ router.post('/checkout', async (req, res) => {
 
 router.post('/refund/:id', protect, isAdmin, async (req, res) => {
   try {
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return res.status(500).json({ message: 'Stripe key missing' })
-    }
-
-    const decodedKey = Buffer
-  .from(process.env.STRIPE_SECRET_KEY_BASE64, 'base64')
-  .toString('utf8')
-
-const stripe = new Stripe(decodedKey)
-
     const order = await Order.findById(req.params.id)
 
     if (!order) {
