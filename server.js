@@ -39,13 +39,7 @@ mongoose.connect(process.env.MONGODB_URI)
   })
 
 /* ======================
-   🚨 STRIPE WEBHOOK
-   MUST BE BEFORE express.json()
-====================== */
-
-/* ======================
-   🚨 STRIPE WEBHOOK
-   MUST BE BEFORE express.json()
+   STRIPE INIT (BASE64 SAFE)
 ====================== */
 
 if (!process.env.STRIPE_SECRET_KEY_BASE64) {
@@ -63,15 +57,18 @@ const decodedStripeKey = Buffer
 
 const stripe = new Stripe(decodedStripeKey)
 
+/* ======================
+   🚨 STRIPE WEBHOOK
+   MUST BE BEFORE express.json()
+====================== */
+
 app.post(
   '/api/webhook',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
 
     const sig = req.headers['stripe-signature']
-    if (!sig) {
-      return res.status(400).send('Missing Stripe signature')
-    }
+    if (!sig) return res.status(400).send('Missing Stripe signature')
 
     let event
 
@@ -127,10 +124,16 @@ app.post(
 )
 
 /* ======================
-   SECURITY + CORS
+   BODY PARSER (AFTER WEBHOOK)
 ====================== */
 
+app.use(express.json())
 
+/* ======================
+   SECURITY
+====================== */
+
+app.use(helmet())
 
 app.use(
   cors({
@@ -142,10 +145,10 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   })
-);
+)
 
 /* ======================
-   RATE LIMITING
+   RATE LIMIT
 ====================== */
 
 const globalLimiter = rateLimit({
