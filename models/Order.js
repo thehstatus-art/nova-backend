@@ -31,10 +31,11 @@ const orderItemSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
   {
+    // 🔥 USER IS NOW OPTIONAL (GUEST CHECKOUT SAFE)
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false,   // ✅ FIXED
       index: true
     },
 
@@ -75,7 +76,7 @@ const orderSchema = new mongoose.Schema(
         'shipped',
         'delivered',
         'cancelled',
-        'refunded' // ✅ ADDED THIS
+        'refunded'
       ],
       default: 'pending'
     }
