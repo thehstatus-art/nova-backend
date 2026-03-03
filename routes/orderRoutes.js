@@ -10,7 +10,7 @@ const router = express.Router()
    CHECKOUT ROUTE
 ========================================= */
 
-router.post('/checkout', protect, async (req, res) => {
+router.post('/checkout', async (req, res) => {
   try {
 
     if (!process.env.STRIPE_SECRET_KEY) {
@@ -26,6 +26,69 @@ router.post('/checkout', protect, async (req, res) => {
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
     }
+
+    let stripeLineItems = []
+    let orderItems = []
+    let totalAmount = 0
+
+    for (const item of items) {
+
+      const product = await Product.findById(item.productId)
+
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' })
+      }
+
+      if (product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Not enough stock for ${product.name}`
+        })
+      }
+
+      const unitAmount = Math.round(product.price * 100)
+      const subtotal = product.price * item.quantity
+      totalAmount += subtotal
+
+      stripeLineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: { name: product.name },
+          unit_amount: unitAmount
+        },
+        quantity: item.quantity
+      })
+
+      orderItems.push({
+        product: product._id,
+        name: product.name,
+        price: product.price,
+        quantity: item.quantity
+      })
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: stripeLineItems,
+      mode: 'payment',
+      success_url: 'https://novapeptidelabs.com/success',
+cancel_url: 'https://novapeptidelabs.com/cancel'
+    })
+
+    await Order.create({
+      items: orderItems,
+      totalAmount,
+      stripeSessionId: session.id,
+      isPaid: false,
+      status: 'pending'
+    })
+
+    return res.json({ url: session.url })
+
+  } catch (error) {
+    console.error('🔥 Checkout error:', error)
+    return res.status(500).json({ message: 'Checkout failed' })
+  }
+})
 
     let stripeLineItems = []
     let orderItems = []
