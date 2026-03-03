@@ -7,19 +7,16 @@ import { protect, isAdmin } from '../middleware/auth.js'
 const router = express.Router()
 
 /* =========================================
-   🔐 STRIPE INITIALIZATION (BASE64 SAFE)
+   🔐 STRIPE INITIALIZATION (FINAL CLEAN VERSION)
 ========================================= */
 
-if (!process.env.STRIPE_SECRET_KEY_BASE64) {
-  console.error('❌ STRIPE_SECRET_KEY_BASE64 missing')
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.error("❌ STRIPE_SECRET_KEY missing")
   process.exit(1)
 }
 
-const decodedStripeKey = Buffer
-  .from(process.env.STRIPE_SECRET_KEY_BASE64, 'base64')
-  .toString('utf8')
-
-const stripe = new Stripe(decodedStripeKey)
+// Trim removes hidden newline/space issues
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 
 /* =========================================
    CHECKOUT ROUTE (PUBLIC)
@@ -27,7 +24,7 @@ const stripe = new Stripe(decodedStripeKey)
 
 router.post('/checkout', async (req, res) => {
   try {
-    const { items } = req.body
+    const { items } = req.body || {}
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
