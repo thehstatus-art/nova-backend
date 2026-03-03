@@ -95,9 +95,25 @@ app.post(
       }
 
       order.isPaid = true
-      order.status = 'paid'
-      order.paidAt = new Date()
-      await order.save()
+order.status = "paid"
+order.paidAt = new Date()
+
+// 🔥 Save customer email from Stripe
+order.customerEmail = session.customer_details?.email || ""
+
+// 🔥 Save shipping info
+if (session.shipping_details) {
+  order.shippingDetails = {
+    name: session.shipping_details.name,
+    address: session.shipping_details.address.line1,
+    city: session.shipping_details.address.city,
+    state: session.shipping_details.address.state,
+    postalCode: session.shipping_details.address.postal_code,
+    country: session.shipping_details.address.country
+  }
+}
+
+await order.save()
 
       for (const item of order.items) {
         const product = await Product.findById(item.product)

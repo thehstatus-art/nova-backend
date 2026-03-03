@@ -1,29 +1,24 @@
-import mongoose from 'mongoose'
+import mongoose from "mongoose"
 
 const orderItemSchema = new mongoose.Schema(
   {
     product: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Product',
+      ref: "Product",
       required: true
     },
-
     name: {
       type: String,
-      required: true,
-      trim: true
+      required: true
     },
-
     quantity: {
       type: Number,
       required: true,
       min: 1
     },
-
     price: {
       type: Number,
-      required: true,
-      min: 0
+      required: true
     }
   },
   { _id: false }
@@ -31,35 +26,39 @@ const orderItemSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
   {
-    // 🔥 USER IS NOW OPTIONAL (GUEST CHECKOUT SAFE)
+    // 🧾 Professional Order Number
+    orderNumber: {
+      type: String,
+      unique: true
+    },
+
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: false,   // ✅ FIXED
-      index: true
+      ref: "User"
+    },
+
+    customerEmail: String,
+
+    shippingDetails: {
+      name: String,
+      address: String,
+      city: String,
+      state: String,
+      postalCode: String,
+      country: String
     },
 
     items: {
       type: [orderItemSchema],
-      required: true,
-      validate: {
-        validator: function (val) {
-          return val.length > 0
-        },
-        message: 'Order must contain at least one item'
-      }
+      required: true
     },
 
     totalAmount: {
       type: Number,
-      required: true,
-      min: 0
+      required: true
     },
 
-    stripeSessionId: {
-      type: String,
-      index: true
-    },
+    stripeSessionId: String,
 
     isPaid: {
       type: Boolean,
@@ -71,17 +70,26 @@ const orderSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        'pending',
-        'paid',
-        'shipped',
-        'delivered',
-        'cancelled',
-        'refunded'
+        "pending",
+        "paid",
+        "shipped",
+        "delivered",
+        "cancelled",
+        "refunded"
       ],
-      default: 'pending'
+      default: "pending"
     }
   },
   { timestamps: true }
 )
 
-export default mongoose.model('Order', orderSchema)
+// 🔥 AUTO GENERATE ORDER NUMBER
+orderSchema.pre("save", function (next) {
+  if (!this.orderNumber) {
+    const random = Math.floor(100000 + Math.random() * 900000)
+    this.orderNumber = `NOVA-${random}`
+  }
+  next()
+})
+
+export default mongoose.model("Order", orderSchema)

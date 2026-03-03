@@ -134,10 +134,20 @@ router.post('/refund/:id', protect, isAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Order not paid' })
     }
 
-    const session = await stripe.checkout.sessions.retrieve(
-      order.stripeSessionId,
-      { expand: ['payment_intent'] }
-    )
+    const session = await stripe.checkout.sessions.create({
+  payment_method_types: ["card"],
+  line_items: stripeLineItems,
+  mode: "payment",
+  success_url:
+    "https://novapeptidelabs.com/success?session_id={CHECKOUT_SESSION_ID}",
+  cancel_url: "https://novapeptidelabs.com/cancel",
+
+  customer_email: undefined, // Stripe auto collects
+
+  shipping_address_collection: {
+    allowed_countries: ["US"]
+  }
+})
 
     const paymentIntentId =
       typeof session.payment_intent === 'string'
