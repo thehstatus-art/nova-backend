@@ -101,7 +101,11 @@ router.post('/refund/:id', protect, isAdmin, async (req, res) => {
       return res.status(500).json({ message: 'Stripe key missing' })
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+    const decodedKey = Buffer
+  .from(process.env.STRIPE_SECRET_KEY_BASE64, 'base64')
+  .toString('utf8')
+
+const stripe = new Stripe(decodedKey)
 
     const order = await Order.findById(req.params.id)
 

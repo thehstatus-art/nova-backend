@@ -51,9 +51,14 @@ if (!process.env.STRIPE_WEBHOOK_SECRET) {
   console.error('❌ STRIPE_WEBHOOK_SECRET missing')
 }
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2023-10-16'
-})
+const rawKey = process.env.STRIPE_SECRET_KEY
+
+console.log("Key chars:")
+for (let i = 0; i < rawKey.length; i++) {
+  console.log(i, rawKey.charCodeAt(i))
+}
+
+const stripe = new Stripe(rawKey.trim())
 
 app.post(
   '/api/webhook',
