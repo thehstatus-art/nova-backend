@@ -13,12 +13,12 @@ const router = express.Router()
 router.post('/checkout', async (req, res) => {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
+      console.log("❌ STRIPE_SECRET_KEY missing")
       return res.status(500).json({ message: 'Stripe key missing' })
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2026-01-28.clover'
-    })
+    // 🔥 FIXED: removed invalid apiVersion
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
     const { items } = req.body
 
@@ -98,6 +98,9 @@ router.post('/refund/:id', protect, isAdmin, async (req, res) => {
       return res.status(500).json({ message: 'Stripe key missing' })
     }
 
+    // 🔥 FIXED: removed invalid apiVersion
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+
     const order = await Order.findById(req.params.id)
 
     if (!order) {
@@ -107,10 +110,6 @@ router.post('/refund/:id', protect, isAdmin, async (req, res) => {
     if (!order.isPaid) {
       return res.status(400).json({ message: 'Order not paid' })
     }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2026-01-28.clover'
-    })
 
     const session = await stripe.checkout.sessions.retrieve(
       order.stripeSessionId,
