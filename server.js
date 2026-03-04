@@ -20,7 +20,7 @@ import { protect, isAdmin } from './middleware/auth.js'
 import Order from './models/Order.js'
 import Product from './models/Product.js'
 import User from './models/User.js'
-import { sendOrderConfirmation } from './utils/sendEmail.js'
+import { sendOrderConfirmation, sendAdminSaleAlert } from './utils/sendEmail.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -114,7 +114,21 @@ if (session.shipping_details) {
 }
 
 await order.save()
+// 📧 Send customer confirmation
+if (order.customerEmail) {
+  try {
+    await sendOrderConfirmation(order, order.customerEmail)
+  } catch (err) {
+    console.error('❌ Customer email failed:', err.message)
+  }
+}
 
+// 📧 Send admin sale alert
+try {
+  await sendAdminSaleAlert(order)
+} catch (err) {
+  console.error('❌ Admin alert failed:', err.message)
+}
       for (const item of order.items) {
         const product = await Product.findById(item.product)
         if (!product) continue
