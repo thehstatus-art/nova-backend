@@ -68,10 +68,10 @@ async function generateShippingLabel(order) {
     const shipment = await shippoClient.shipments.create({
       address_from: {
         name: "Nova Peptide Labs",
-        street1: "YOUR BUSINESS ADDRESS",
-        city: "Hoboken",
-        state: "NJ",
-        zip: "07030",
+        street1: "6801 14th ave apt 1",
+        city: "Brooklyn",
+        state: "NY",
+        zip: "11219",
         country: "US"
       },
       address_to: {
