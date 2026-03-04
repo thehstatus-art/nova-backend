@@ -36,15 +36,13 @@ router.post('/checkout', async (req, res) => {
     for (const item of items) {
       const product = await Product.findById(item.productId)
 
-      if (!product) {
+      if (!product)
         return res.status(404).json({ message: 'Product not found' })
-      }
 
-      if (product.stock < item.quantity) {
+      if (product.stock < item.quantity)
         return res.status(400).json({
           message: `Not enough stock for ${product.name}`
         })
-      }
 
       const unitAmount = Math.round(product.price * 100)
       totalAmount += product.price * item.quantity
@@ -66,7 +64,6 @@ router.post('/checkout', async (req, res) => {
       })
     }
 
-    // 🔥 Create Stripe Session WITH metadata
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: stripeLineItems,
@@ -74,12 +71,11 @@ router.post('/checkout', async (req, res) => {
       success_url:
         'https://novapeptidelabs.com/success?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: 'https://novapeptidelabs.com/cancel',
-      metadata: {
-        internal_reference: Date.now().toString()
+      shipping_address_collection: {
+        allowed_countries: ['US']
       }
     })
 
-    // Save order BEFORE payment
     await Order.create({
       items: orderItems,
       totalAmount,
@@ -88,17 +84,16 @@ router.post('/checkout', async (req, res) => {
       status: 'pending'
     })
 
-    return res.json({ url: session.url })
+    res.json({ url: session.url })
 
   } catch (error) {
     console.error('🔥 Checkout error:', error)
-    return res.status(500).json({ message: 'Checkout failed' })
+    res.status(500).json({ message: 'Checkout failed' })
   }
 })
 
 /* =========================================
-   GET ORDER BY STRIPE SESSION (NEW)
-   Used by Success Page
+   GET ORDER BY STRIPE SESSION
 ========================================= */
 
 router.get('/by-session/:sessionId', async (req, res) => {
@@ -107,14 +102,13 @@ router.get('/by-session/:sessionId', async (req, res) => {
       stripeSessionId: req.params.sessionId
     })
 
-    if (!order) {
+    if (!order)
       return res.status(404).json({ message: 'Order not found' })
-    }
 
-    return res.json(order)
+    res.json(order)
 
-  } catch (err) {
-    return res.status(500).json({ message: 'Failed to fetch order' })
+  } catch {
+    res.status(500).json({ message: 'Failed to fetch order' })
   }
 })
 
@@ -126,41 +120,26 @@ router.post('/refund/:id', protect, isAdmin, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
 
-    if (!order) {
+    if (!order)
       return res.status(404).json({ message: 'Order not found' })
-    }
 
-    if (!order.isPaid) {
+    if (!order.isPaid)
       return res.status(400).json({ message: 'Order not paid' })
-    }
 
-    const session = await stripe.checkout.sessions.create({
-  payment_method_types: ["card"],
-  line_items: stripeLineItems,
-  mode: "payment",
-  success_url:
-    "https://novapeptidelabs.com/success?session_id={CHECKOUT_SESSION_ID}",
-  cancel_url: "https://novapeptidelabs.com/cancel",
-
-  customer_email: undefined, // Stripe auto collects
-
-  shipping_address_collection: {
-    allowed_countries: ["US"]
-  }
-})
-
-    const paymentIntentId =
-      typeof session.payment_intent === 'string'
-        ? session.payment_intent
-        : session.payment_intent.id
+    if (!order.paymentIntentId)
+      return res.status(400).json({
+        message: 'No payment intent stored on order'
+      })
 
     await stripe.refunds.create({
-      payment_intent: paymentIntentId
+      payment_intent: order.paymentIntentId
     })
 
+    // Restock products
     for (const item of order.items) {
       const product = await Product.findById(item.product)
       if (!product) continue
+
       product.stock += item.quantity
       await product.save()
     }
@@ -168,14 +147,11 @@ router.post('/refund/:id', protect, isAdmin, async (req, res) => {
     order.status = 'refunded'
     await order.save()
 
-    return res.json({ message: 'Refund successful' })
+    res.json({ message: 'Refund successful' })
 
   } catch (err) {
     console.error('🔥 Refund error:', err.message)
-    return res.status(500).json({
-      message: 'Refund failed',
-      error: err.message
-    })
+    res.status(500).json({ message: 'Refund failed' })
   }
 })
 
