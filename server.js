@@ -166,6 +166,9 @@ app.use(
     origin: [
       "https://www.novapeptidelabs.org",
       "https://novapeptidelabs.org",
+      "https://novapeptidelabs.vercel.app",
+      "https://novapeptidelabs-frontend.vercel.app",
+      "http://localhost:5173",
       "http://localhost:3000"
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
