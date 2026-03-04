@@ -9,6 +9,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
+import Shippo from 'shippo'
 
 import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
@@ -19,20 +20,20 @@ import uploadRoutes from './routes/uploadRoutes.js'
 import { protect, isAdmin } from './middleware/auth.js'
 import Order from './models/Order.js'
 import Product from './models/Product.js'
-import User from './models/User.js'
-import { sendOrderConfirmation, sendAdminSaleAlert } from './utils/sendEmail.js'
+import {
+  sendOrderConfirmation,
+  sendAdminSaleAlert,
+  sendAdminLowStockAlert,
+  sendTrackingEmail
+} from './utils/sendEmail.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
-
-// 🔥 REQUIRED FOR RENDER (fixes proxy warning)
 app.set('trust proxy', 1)
 
-/* ======================
-   DATABASE CONNECTION
-====================== */
+/* ================= DATABASE ================= */
 
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected'))
@@ -41,25 +42,138 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1)
   })
 
-/* ======================
-   STRIPE INIT (FINAL CLEAN)
-====================== */
+/* ================= STRIPE ================= */
 
 if (!process.env.STRIPE_SECRET_KEY) {
   console.error("❌ STRIPE_SECRET_KEY missing")
   process.exit(1)
 }
 
-// trim() removes hidden newline/space issues
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 
-/* ======================
-   🚨 STRIPE WEBHOOK
-   MUST BE BEFORE express.json()
-====================== */
+/* ================= SHIPPO ================= */
 
-app.post(
-  '/api/webhook',
+const shippoClient = process.env.SHIPPO_API_KEY
+  ? new Shippo(process.env.SHIPPO_API_KEY)
+  : null
+
+/* ================= SHIPPING FUNCTION ================= */
+
+async function generateShippingLabel(order) {
+
+  if (!shippoClient || !order?.shippingDetails || order.shippingLabelUrl)
+    return
+
+  try {
+    const shipment = await shippoClient.shipments.create({
+      address_from: {
+        name: "Nova Peptide Labs",
+        street1: "YOUR BUSINESS ADDRESS",
+        city: "Hoboken",
+        state: "NJ",
+        zip: "07030",
+        country: "US"
+      },
+      address_to: {
+        name: order.shippingDetails.name,
+        street1: order.shippingDetails.address,
+        city: order.shippingDetails.city,
+        state: order.shippingDetails.state,
+        zip: order.shippingDetails.postalCode,
+        country: order.shippingDetails.country
+      },
+      parcels: [{
+        length: "6",
+        width: "4",
+        height: "2",
+        distance_unit: "in",
+        weight: "0.5",
+        mass_unit: "lb"
+      }]
+    })
+
+    const rate = shipment.rates?.find(r => r.provider === "USPS")
+    if (!rate) return
+
+    const transaction = await shippoClient.transactions.create({
+      rate: rate.object_id,
+      label_file_type: "PDF"
+    })
+
+    if (transaction.status !== "SUCCESS") return
+
+    order.shippingLabelUrl = transaction.label_url
+    order.trackingNumber = transaction.tracking_number
+    order.status = "shipped"
+
+    await order.save()
+
+    if (order.customerEmail)
+      await sendTrackingEmail(order)
+
+    console.log("✅ Shipping label generated:", order._id)
+
+  } catch (err) {
+    console.error("Shippo error:", err.message)
+  }
+}
+
+/* ================= LIVE USPS RATES ================= */
+
+app.post('/api/shipping/rates', async (req, res) => {
+  try {
+
+    if (!shippoClient)
+      return res.status(400).json({ message: "Shipping not active" })
+
+    const { address } = req.body
+
+    const shipment = await shippoClient.shipments.create({
+      address_from: {
+        name: "Nova Peptide Labs",
+        street1: "YOUR BUSINESS ADDRESS",
+        city: "Hoboken",
+        state: "NJ",
+        zip: "07030",
+        country: "US"
+      },
+      address_to: {
+        name: address.name,
+        street1: address.line1,
+        city: address.city,
+        state: address.state,
+        zip: address.postalCode,
+        country: address.country
+      },
+      parcels: [{
+        length: "6",
+        width: "4",
+        height: "2",
+        distance_unit: "in",
+        weight: "0.5",
+        mass_unit: "lb"
+      }]
+    })
+
+    const rates = shipment.rates
+      .filter(r => r.provider === "USPS")
+      .map(r => ({
+        service: r.servicelevel.name,
+        price: r.amount,
+        rateId: r.object_id
+      }))
+
+    res.json(rates)
+
+  } catch (err) {
+    console.error("Shipping rate error:", err.message)
+    res.status(500).json({ message: "Failed to fetch shipping rates" })
+  }
+})
+
+/* ================= STRIPE WEBHOOK ================= */
+
+app.post('/api/webhook',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
 
@@ -75,205 +189,108 @@ app.post(
         process.env.STRIPE_WEBHOOK_SECRET
       )
     } catch (err) {
-      console.error('🔥 Stripe signature error:', err.message)
       return res.status(400).send(`Webhook Error: ${err.message}`)
     }
 
-    if (event.type !== 'checkout.session.completed') {
+    if (event.type !== 'checkout.session.completed')
       return res.status(200).json({ received: true })
-    }
 
     try {
       const session = event.data.object
+      const order = await Order.findOne({ stripeSessionId: session.id })
 
-      const order = await Order.findOne({
-        stripeSessionId: session.id
-      })
-
-      if (!order || order.isPaid) {
+      if (!order || order.isPaid)
         return res.status(200).json({ received: true })
-      }
 
       order.isPaid = true
-order.status = "paid"
-order.paidAt = new Date()
+      order.status = "paid"
+      order.paidAt = new Date()
+      order.customerEmail = session.customer_details?.email || ""
 
-// 🔥 Save customer email from Stripe
-order.customerEmail = session.customer_details?.email || ""
+      if (session.shipping_details) {
+        order.shippingDetails = {
+          name: session.shipping_details.name,
+          address: session.shipping_details.address.line1,
+          city: session.shipping_details.address.city,
+          state: session.shipping_details.address.state,
+          postalCode: session.shipping_details.address.postal_code,
+          country: session.shipping_details.address.country
+        }
+      }
 
-// 🔥 Save shipping info
-if (session.shipping_details) {
-  order.shippingDetails = {
-    name: session.shipping_details.name,
-    address: session.shipping_details.address.line1,
-    city: session.shipping_details.address.city,
-    state: session.shipping_details.address.state,
-    postalCode: session.shipping_details.address.postal_code,
-    country: session.shipping_details.address.country
-  }
-}
+      await order.save()
 
-await order.save()
-// 📧 Send customer confirmation
-if (order.customerEmail) {
-  try {
-    await sendOrderConfirmation(order, order.customerEmail)
-  } catch (err) {
-    console.error('❌ Customer email failed:', err.message)
-  }
-}
+      if (order.customerEmail)
+        await sendOrderConfirmation(order, order.customerEmail)
 
-// 📧 Send admin sale alert
-try {
-  await sendAdminSaleAlert(order)
-} catch (err) {
-  console.error('❌ Admin alert failed:', err.message)
-}
+      await sendAdminSaleAlert(order)
+
       for (const item of order.items) {
         const product = await Product.findById(item.product)
         if (!product) continue
-        if (product.stock < item.quantity) continue
 
         product.stock -= item.quantity
         await product.save()
+
+        if (product.stock <= 5)
+          await sendAdminLowStockAlert(product)
       }
 
-      console.log('✅ Order processed:', order._id)
+      await generateShippingLabel(order)
 
       return res.status(200).json({ received: true })
 
     } catch (err) {
-      console.error('🔥 Webhook processing error:', err.message)
-      return res.status(500).send('Internal webhook error')
+      return res.status(500).send('Webhook error')
     }
   }
 )
 
-/* ======================
-   BODY PARSER (AFTER WEBHOOK)
-====================== */
+/* ================= BULK LABELS ================= */
+
+app.post('/api/admin/bulk-labels', protect, isAdmin, async (req, res) => {
+
+  const { orderIds } = req.body
+
+  const orders = await Order.find({
+    _id: { $in: orderIds },
+    isPaid: true,
+    shippingLabelUrl: { $exists: false }
+  })
+
+  for (const order of orders)
+    await generateShippingLabel(order)
+
+  res.json({ message: "Bulk labels processed" })
+})
+
+/* ================= SHIPPING DASHBOARD ================= */
+
+app.get('/api/admin/shipping', protect, isAdmin, async (req, res) => {
+
+  const orders = await Order.find({ isPaid: true })
+    .sort({ createdAt: -1 })
+
+  res.json(orders.map(order => ({
+    id: order._id,
+    email: order.customerEmail,
+    status: order.status,
+    tracking: order.trackingNumber,
+    label: order.shippingLabelUrl
+  })))
+})
+
+/* ================= MIDDLEWARE ================= */
 
 app.use(express.json())
-
-/* ======================
-   SECURITY
-====================== */
-
 app.use(helmet())
-
-
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (like Postman)
-      if (!origin) return callback(null, true);
-
-      const allowedOrigins = [
-        "https://www.novapeptidelabs.org",
-        "https://novapeptidelabs.org",
-        "http://localhost:5173",
-        "http://localhost:3000"
-      ];
-
-      // Allow any Vercel deployment automatically
-      if (origin.includes("vercel.app")) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true
-  })
-);
-
-/* ======================
-   RATE LIMIT
-====================== */
-
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100
-})
-
-app.use(globalLimiter)
-
-/* ======================
-   STATIC FILES
-====================== */
-
+app.use(cors({ origin: true, credentials: true }))
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }))
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
-/* ======================
-   ROUTES
-====================== */
-
-app.use('/api/products', productRoutes)
-app.use('/api/orders', orderRoutes)
-app.use('/api/batch', batchRoutes)
-app.use('/api/auth', authRoutes)
-app.use('/api/upload', uploadRoutes)
-
-/* ======================
-   ADMIN ROUTES
-====================== */
-
-app.get('/api/admin/orders', protect, isAdmin, async (req, res) => {
-  try {
-    const orders = await Order.find().sort({ createdAt: -1 })
-    res.json(orders)
-  } catch {
-    res.status(500).json({ message: 'Failed to fetch orders' })
-  }
-})
-
-app.get('/api/admin/stats', protect, isAdmin, async (req, res) => {
-  try {
-    const totalOrders = await Order.countDocuments()
-    const paidOrders = await Order.countDocuments({ isPaid: true })
-    const pendingOrders = await Order.countDocuments({ isPaid: false })
-
-    const revenueData = await Order.aggregate([
-      { $match: { isPaid: true } },
-      { $group: { _id: null, totalRevenue: { $sum: "$totalAmount" } } }
-    ])
-
-    const totalRevenue =
-      revenueData.length > 0 ? revenueData[0].totalRevenue : 0
-
-    res.json({
-      totalRevenue,
-      totalOrders,
-      paidOrders,
-      pendingOrders
-    })
-  } catch {
-    res.status(500).json({ message: 'Failed to load stats' })
-  }
-})
-
-/* ======================
-   HEALTH
-====================== */
-
-app.get('/', (req, res) => {
-  res.send('Nova Backend is live 🚀')
-})
-
-app.get('/api/health', (req, res) => {
-  res.json({ message: 'API running' })
-})
-
-/* ======================
-   START SERVER
-====================== */
+/* ================= START ================= */
 
 const PORT = process.env.PORT || 5050
-
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`)
 })
