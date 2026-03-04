@@ -23,7 +23,7 @@ import Product from './models/Product.js'
 import {
   sendOrderConfirmation,
   sendAdminSaleAlert,
-  sendAdminLowStockAlert,
+  
   sendTrackingEmail
 } from './utils/sendEmail.js'
 
@@ -225,22 +225,22 @@ app.post('/api/webhook',
 
       await sendAdminSaleAlert(order)
 
+      // Reduce stock
       for (const item of order.items) {
         const product = await Product.findById(item.product)
         if (!product) continue
 
         product.stock -= item.quantity
         await product.save()
-
-        if (product.stock <= 5)
-          await sendAdminLowStockAlert(product)
       }
 
+      // Generate shipping label
       await generateShippingLabel(order)
 
       return res.status(200).json({ received: true })
 
     } catch (err) {
+      console.error("Webhook error:", err)
       return res.status(500).send('Webhook error')
     }
   }
