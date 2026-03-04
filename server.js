@@ -9,7 +9,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
-import Shippo from 'shippo'
+import ShippoModule from "shippo";
 
 import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
@@ -56,8 +56,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 /* ================= SHIPPO ================= */
 
 const shippoClient = process.env.SHIPPO_API_KEY
-  ? new Shippo({ apiKey: process.env.SHIPPO_API_KEY })
-  : null
+  ? ShippoModule.default
+      ? new ShippoModule.default({ apiKey: process.env.SHIPPO_API_KEY })
+      : new ShippoModule({ apiKey: process.env.SHIPPO_API_KEY })
+  : null;
 
 /* ================= SHIPPING FUNCTION ================= */
 
