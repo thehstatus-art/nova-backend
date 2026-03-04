@@ -51,10 +51,12 @@ if (!process.env.STRIPE_SECRET_KEY) {
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 
+
+
 /* ================= SHIPPO ================= */
 
 const shippoClient = process.env.SHIPPO_API_KEY
-  ? new Shippo(process.env.SHIPPO_API_KEY)
+  ? shippo(process.env.SHIPPO_API_KEY)
   : null
 
 /* ================= SHIPPING FUNCTION ================= */
