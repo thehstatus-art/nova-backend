@@ -1,85 +1,98 @@
 import mongoose from "mongoose"
 
+/* ======================
+   BATCH SCHEMA
+====================== */
+
 const batchSchema = new mongoose.Schema(
   {
-    batchNumber: { 
-      type: String, 
+    batchNumber: {
+      type: String,
       required: true,
-      trim: true 
+      trim: true
     },
-    purity: { 
+    purity: {
       type: String,
-      trim: true 
+      trim: true
     },
-    manufacturedDate: { 
-      type: Date 
+    manufacturedDate: {
+      type: Date
     },
-    coaUrl: { 
+    coaUrl: {
       type: String,
-      trim: true 
+      trim: true
     },
-    active: { 
-      type: Boolean, 
-      default: true 
+    active: {
+      type: Boolean,
+      default: true
     }
   },
   { _id: true }
 )
 
+/* ======================
+   PRODUCT SCHEMA
+====================== */
+
 const productSchema = new mongoose.Schema(
   {
-    name: { 
-      type: String, 
+    name: {
+      type: String,
       required: true,
-      trim: true 
+      trim: true
     },
 
-    slug: { 
-      type: String, 
-      unique: true, 
+    slug: {
+      type: String,
+      unique: true,
       required: true,
       lowercase: true,
-      trim: true 
+      trim: true
     },
 
-    description: { 
-      type: String 
+    description: {
+      type: String
     },
 
-    price: { 
-      type: Number, 
+    price: {
+      type: Number,
       required: true,
-      min: 0 
+      min: 0
     },
 
-    stock: { 
-      type: Number, 
+    stock: {
+      type: Number,
       default: 0,
-      min: 0 
+      min: 0
     },
 
-    category: { 
+    category: {
       type: String,
-      trim: true 
+      trim: true
     },
 
-    // 🔥 CLOUDINARY IMAGE URL
-    image: { 
+    image: {
       type: String,
       required: true,
-      trim: true 
+      trim: true
     },
 
-    molecularWeight: { 
-      type: String 
+    molecularWeight: {
+      type: String
     },
 
-    formula: { 
-      type: String 
+    formula: {
+      type: String
     },
 
-    storage: { 
-      type: String 
+    storage: {
+      type: String
+    },
+
+    // 🔥 Manual visibility toggle (Option B)
+    isActive: {
+      type: Boolean,
+      default: true
     },
 
     batches: [batchSchema]
