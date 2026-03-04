@@ -161,7 +161,7 @@ app.use(express.json())
 
 app.use(helmet())
 
-import cors from "cors";
+
 
 app.use(
   cors({
