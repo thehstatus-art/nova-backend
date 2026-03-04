@@ -47,22 +47,18 @@ Nova Peptide Labs
    ADMIN SALE ALERT EMAIL
 ====================================== */
 
-export const sendAdminSaleAlert = async (order) => {
-
+export const sendAdminLowStockAlert = async (product) => {
   await transporter.sendMail({
     from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
-    to: process.env.ZOHO_EMAIL, // sends to your support inbox
-    subject: `💰 New Sale - $${order.totalAmount}`,
+    to: process.env.ZOHO_EMAIL,
+    subject: `⚠ LOW STOCK ALERT - ${product.name}`,
     text: `
-🚀 New Order Received
+Product: ${product.name}
+Remaining Stock: ${product.stock}
 
-Order ID: ${order._id}
-Total: $${order.totalAmount}
-Time: ${new Date().toISOString()}
-
-Check admin dashboard for details.
+Please restock immediately.
 `
-  })
+  });
 
-  console.log('📧 Admin sale alert sent')
-}
+  console.log("Low stock alert sent");
+};
