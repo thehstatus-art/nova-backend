@@ -1,10 +1,10 @@
 import nodemailer from 'nodemailer'
 
-// 🔒 Create transporter once (not every email)
+// 🔒 Create transporter once
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: Number(process.env.EMAIL_PORT),
-  secure: true, // required for 465
+  secure: true,
   auth: {
     user: process.env.ZOHO_EMAIL,
     pass: process.env.ZOHO_APP_PASSWORD
@@ -47,6 +47,52 @@ Nova Peptide Labs
    ADMIN SALE ALERT EMAIL
 ====================================== */
 
+export const sendAdminSaleAlert = async (order) => {
+  await transporter.sendMail({
+    from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
+    to: process.env.ZOHO_EMAIL,
+    subject: `💰 New Sale - $${order.totalAmount}`,
+    text: `
+New Order Received 🚀
+
+Order ID: ${order._id}
+Total: $${order.totalAmount}
+Customer: ${order.customerEmail}
+`
+  })
+
+  console.log('📧 Admin sale alert sent')
+}
+
+/* ======================================
+   TRACKING EMAIL
+====================================== */
+
+export const sendTrackingEmail = async (order) => {
+  await transporter.sendMail({
+    from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
+    to: order.customerEmail,
+    subject: '📦 Your Order Has Shipped',
+    text: `
+Your order has shipped!
+
+Tracking Number:
+${order.trackingNumber}
+
+Track your package:
+${order.shippingLabelUrl}
+
+Thank you for choosing Nova Peptide Labs.
+`
+  })
+
+  console.log('📦 Tracking email sent')
+}
+
+/* ======================================
+   LOW STOCK ALERT
+====================================== */
+
 export const sendAdminLowStockAlert = async (product) => {
   await transporter.sendMail({
     from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
@@ -58,7 +104,7 @@ Remaining Stock: ${product.stock}
 
 Please restock immediately.
 `
-  });
+  })
 
-  console.log("Low stock alert sent");
-};
+  console.log("⚠ Low stock alert sent")
+}
