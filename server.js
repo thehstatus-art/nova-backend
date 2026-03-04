@@ -9,7 +9,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
-import Shippo from 'shippo'
+import shippo from 'shippo'
 
 import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
