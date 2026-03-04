@@ -316,9 +316,18 @@ app.use(cors({ origin: true, credentials: true }))
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }))
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
+/* ================= ROUTES ================= */
+
+app.use('/api/products', productRoutes)
+app.use('/api/orders', orderRoutes)
+app.use('/api/batch', batchRoutes)
+app.use('/api/auth', authRoutes)
+app.use('/api/upload', uploadRoutes)
+
 /* ================= START ================= */
 
 const PORT = process.env.PORT || 5050
+
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`)
 })
