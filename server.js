@@ -9,7 +9,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
-import ShippoModule from "shippo";
+
 
 import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
@@ -53,72 +53,90 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 
 
 
-/* ================= SHIPPO ================= */
+/* ================= SHIPPO REST ================= */
 
-const shippoClient = process.env.SHIPPO_API_KEY
-  ? ShippoModule.default
-      ? new ShippoModule.default({ apiKey: process.env.SHIPPO_API_KEY })
-      : new ShippoModule({ apiKey: process.env.SHIPPO_API_KEY })
-  : null;
+const SHIPPO_API = "https://api.goshippo.com";
+
+const shippoHeaders = {
+  Authorization: `ShippoToken ${process.env.SHIPPO_API_KEY}`,
+  "Content-Type": "application/json"
+};
 
 /* ================= SHIPPING FUNCTION ================= */
 
 async function generateShippingLabel(order) {
 
-  if (!shippoClient || !order?.shippingDetails || order.shippingLabelUrl)
-    return
+  if (!process.env.SHIPPO_API_KEY || !order?.shippingDetails || order.shippingLabelUrl)
+    return;
 
   try {
-    const shipment = await shippoClient.shipments.create({
-      address_from: {
-        name: "Nova Peptide Labs",
-        street1: "6801 14th ave apt 1",
-        city: "Brooklyn",
-        state: "NY",
-        zip: "11219",
-        country: "US"
-      },
-      address_to: {
-        name: order.shippingDetails.name,
-        street1: order.shippingDetails.address,
-        city: order.shippingDetails.city,
-        state: order.shippingDetails.state,
-        zip: order.shippingDetails.postalCode,
-        country: order.shippingDetails.country
-      },
-      parcels: [{
-        length: "6",
-        width: "4",
-        height: "2",
-        distance_unit: "in",
-        weight: "0.5",
-        mass_unit: "lb"
-      }]
-    })
 
-    const rate = shipment.rates?.find(r => r.provider === "USPS")
-    if (!rate) return
+    // 1️⃣ Create shipment
+    const shipmentRes = await fetch(`${SHIPPO_API}/shipments/`, {
+      method: "POST",
+      headers: shippoHeaders,
+      body: JSON.stringify({
+        address_from: {
+          name: "Nova Peptide Labs",
+          street1: "6801 14th ave apt 1",
+          city: "Brooklyn",
+          state: "NY",
+          zip: "11219",
+          country: "US"
+        },
+        address_to: {
+          name: order.shippingDetails.name,
+          street1: order.shippingDetails.address,
+          city: order.shippingDetails.city,
+          state: order.shippingDetails.state,
+          zip: order.shippingDetails.postalCode,
+          country: order.shippingDetails.country
+        },
+        parcels: [{
+          length: "6",
+          width: "4",
+          height: "2",
+          distance_unit: "in",
+          weight: "0.5",
+          mass_unit: "lb"
+        }],
+        async: false
+      })
+    });
 
-    const transaction = await shippoClient.transactions.create({
-      rate: rate.object_id,
-      label_file_type: "PDF"
-    })
+    const shipment = await shipmentRes.json();
 
-    if (transaction.status !== "SUCCESS") return
+    const uspsRate = shipment.rates?.find(r => r.provider === "USPS");
+    if (!uspsRate) return;
 
-    order.shippingLabelUrl = transaction.label_url
-    order.trackingNumber = transaction.tracking_number
-    order.status = "shipped"
+    // 2️⃣ Buy label
+    const transactionRes = await fetch(`${SHIPPO_API}/transactions/`, {
+      method: "POST",
+      headers: shippoHeaders,
+      body: JSON.stringify({
+        rate: uspsRate.object_id,
+        label_file_type: "PDF",
+        async: false
+      })
+    });
 
-    await order.save()
+    const transaction = await transactionRes.json();
+
+    if (transaction.status !== "SUCCESS") return;
+
+    order.shippingLabelUrl = transaction.label_url;
+    order.trackingNumber = transaction.tracking_number;
+    order.status = "shipped";
+
+    await order.save();
 
     if (order.customerEmail)
-      await sendTrackingEmail(order)
+      await sendTrackingEmail(order);
 
-    console.log("✅ Shipping label generated:", order._id)
+    console.log("✅ Shipping label generated:", order._id);
 
   } catch (err) {
-    console.error("Shippo error:", err.message)
+    console.error("🔥 Shippo API error:", err.message);
   }
 }
 
@@ -127,54 +145,60 @@ async function generateShippingLabel(order) {
 app.post('/api/shipping/rates', async (req, res) => {
   try {
 
-    if (!shippoClient)
-      return res.status(400).json({ message: "Shipping not active" })
+    if (!process.env.SHIPPO_API_KEY)
+      return res.status(400).json({ message: "Shipping not active" });
 
-    const { address } = req.body
+    const { address } = req.body;
 
-    const shipment = await shippoClient.shipments.create({
-      address_from: {
-        name: "Nova Peptide Labs",
-        street1: "YOUR BUSINESS ADDRESS",
-        city: "Hoboken",
-        state: "NJ",
-        zip: "07030",
-        country: "US"
-      },
-      address_to: {
-        name: address.name,
-        street1: address.line1,
-        city: address.city,
-        state: address.state,
-        zip: address.postalCode,
-        country: address.country
-      },
-      parcels: [{
-        length: "6",
-        width: "4",
-        height: "2",
-        distance_unit: "in",
-        weight: "0.5",
-        mass_unit: "lb"
-      }]
-    })
+    const shipmentRes = await fetch(`${SHIPPO_API}/shipments/`, {
+      method: "POST",
+      headers: shippoHeaders,
+      body: JSON.stringify({
+        address_from: {
+          name: "Nova Peptide Labs",
+          street1: "6801 14th ave apt 1",
+          city: "Brooklyn",
+          state: "NY",
+          zip: "11219",
+          country: "US"
+        },
+        address_to: {
+          name: address.name,
+          street1: address.line1,
+          city: address.city,
+          state: address.state,
+          zip: address.postalCode,
+          country: address.country
+        },
+        parcels: [{
+          length: "6",
+          width: "4",
+          height: "2",
+          distance_unit: "in",
+          weight: "0.5",
+          mass_unit: "lb"
+        }],
+        async: false
+      })
+    });
+
+    const shipment = await shipmentRes.json();
 
     const rates = shipment.rates
-      .filter(r => r.provider === "USPS")
+      ?.filter(r => r.provider === "USPS")
       .map(r => ({
         service: r.servicelevel.name,
         price: r.amount,
         rateId: r.object_id
-      }))
+      })) || [];
 
-    res.json(rates)
+    res.json(rates);
 
   } catch (err) {
-    console.error("Shipping rate error:", err.message)
-    res.status(500).json({ message: "Failed to fetch shipping rates" })
+    console.error("Shipping rate error:", err.message);
+    res.status(500).json({ message: "Failed to fetch shipping rates" });
   }
-})
-
+});
 /* ================= STRIPE WEBHOOK ================= */
 
 app.post('/api/webhook',
