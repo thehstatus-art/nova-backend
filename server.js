@@ -9,7 +9,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
-
+import cartRoutes from "./routes/cartRoutes.js"
 
 import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
@@ -323,7 +323,7 @@ app.use('/api/orders', orderRoutes)
 app.use('/api/batch', batchRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/upload', uploadRoutes)
-
+app.use("/api/cart", cartRoutes)
 /* ================= START ================= */
 
 const PORT = process.env.PORT || 5050

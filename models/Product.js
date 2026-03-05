@@ -11,23 +11,41 @@ const batchSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+
     purity: {
       type: String,
       trim: true
     },
+
     manufacturedDate: {
       type: Date
     },
+
     coaUrl: {
       type: String,
       trim: true
     },
+
+    // which batch is currently sold
     active: {
       type: Boolean,
       default: true
     }
   },
   { _id: true }
+)
+
+/* ======================
+   REVIEW SCHEMA
+====================== */
+
+const reviewSchema = new mongoose.Schema(
+  {
+    name: String,
+    rating: Number,
+    comment: String
+  },
+  { timestamps: true }
 )
 
 /* ======================
@@ -50,9 +68,7 @@ const productSchema = new mongoose.Schema(
       trim: true
     },
 
-    description: {
-      type: String
-    },
+    description: String,
 
     price: {
       type: Number,
@@ -77,25 +93,58 @@ const productSchema = new mongoose.Schema(
       trim: true
     },
 
-    molecularWeight: {
-      type: String
+    /* ======================
+       SCIENTIFIC DATA
+    ====================== */
+
+    molecularWeight: String,
+
+    formula: String,
+
+    sequence: String,
+
+    storage: String,
+
+    purity: String,
+
+    /* ======================
+       DOCUMENTATION
+    ====================== */
+
+    sdsUrl: String,
+
+    researchDocUrl: String,
+
+    /* ======================
+       BUSINESS DATA
+    ====================== */
+
+    cost: {
+      type: Number,
+      default: 0
     },
 
-    formula: {
-      type: String
-    },
-
-    storage: {
-      type: String
-    },
-
-    // 🔥 Manual visibility toggle (Option B)
     isActive: {
       type: Boolean,
       default: true
     },
 
-    batches: [batchSchema]
+    featured: {
+      type: Boolean,
+      default: false
+    },
+
+    /* ======================
+       BATCH DATA
+    ====================== */
+
+    batches: [batchSchema],
+
+    /* ======================
+       REVIEWS
+    ====================== */
+
+    reviews: [reviewSchema]
   },
   { timestamps: true }
 )
