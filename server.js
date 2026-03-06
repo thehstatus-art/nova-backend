@@ -10,7 +10,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import Stripe from 'stripe'
 import cartRoutes from "./routes/cartRoutes.js"
-
+import emailRoutes from "./routes/emailRoutes.js";
 import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
@@ -324,6 +324,7 @@ app.use('/api/batch', batchRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use("/api/cart", cartRoutes)
+app.use("/api/email", emailRoutes);
 /* ================= START ================= */
 
 const PORT = process.env.PORT || 5050
