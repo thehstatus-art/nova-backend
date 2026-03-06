@@ -1,6 +1,6 @@
 import dotenv from 'dotenv'
 dotenv.config()
-
+import verifyRoutes from "./routes/verifyRoutes.js";
 import express from 'express'
 import mongoose from 'mongoose'
 import path from 'path'
@@ -325,6 +325,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use("/api/cart", cartRoutes)
 app.use("/api/email", emailRoutes);
+app.use("/api/verify", verifyRoutes);
 /* ================= START ================= */
 
 const PORT = process.env.PORT || 5050
