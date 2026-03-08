@@ -69,8 +69,8 @@ router.post('/checkout', async (req, res) => {
       line_items: stripeLineItems,
       mode: 'payment',
       success_url:
-        'https://novapeptidelabs.com/success?session_id={CHECKOUT_SESSION_ID}',
-      cancel_url: 'https://novapeptidelabs.com/cancel',
+  'https://novapeptidelabs.org/success?session_id={CHECKOUT_SESSION_ID}',
+cancel_url: 'https://novapeptidelabs.org/cancel',
       shipping_address_collection: {
         allowed_countries: ['US']
       }
