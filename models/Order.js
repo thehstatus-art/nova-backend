@@ -84,12 +84,11 @@ const orderSchema = new mongoose.Schema(
 )
 
 // 🔥 AUTO GENERATE ORDER NUMBER
-orderSchema.pre("save", function (next) {
+oorderSchema.pre("save", function () {
   if (!this.orderNumber) {
     const random = Math.floor(100000 + Math.random() * 900000)
     this.orderNumber = `NOVA-${random}`
   }
-  next()
 })
 
 export default mongoose.model("Order", orderSchema)
