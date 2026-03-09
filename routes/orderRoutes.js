@@ -3,7 +3,7 @@ import Stripe from 'stripe'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import { protect, isAdmin } from '../middleware/auth.js'
-
+import { sendAbandonedCheckoutEmail } from '../utils/sendEmail.js'
 const router = express.Router()
 
 /* =========================================
@@ -84,6 +84,21 @@ cancel_url: 'https://novapeptidelabs.org/cancel',
       isPaid: false,
       status: 'pending'
     })
+    /* ===============================
+   ABANDONED CHECKOUT EMAILS
+================================ */
+
+setTimeout(() => {
+  sendAbandonedCheckoutEmail(email, 1)
+}, 1000 * 60 * 30) // 30 minutes
+
+setTimeout(() => {
+  sendAbandonedCheckoutEmail(email, 2)
+}, 1000 * 60 * 60 * 6) // 6 hours
+
+setTimeout(() => {
+  sendAbandonedCheckoutEmail(email, 3)
+}, 1000 * 60 * 60 * 24) // 24 hours
 
     res.json({ url: session.url })
 
