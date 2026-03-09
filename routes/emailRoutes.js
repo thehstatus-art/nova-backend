@@ -1,5 +1,6 @@
 import express from "express";
 import Subscriber from "../models/Subscriber.js";
+import { sendWelcomeEmail } from "../utils/sendEmail.js";
 
 const router = express.Router();
 
@@ -20,6 +21,9 @@ router.post("/subscribe", async (req, res) => {
       return res.json({ message: "Already subscribed" });
 
     const subscriber = await Subscriber.create({ email });
+
+    /* SEND WELCOME EMAIL */
+    await sendWelcomeEmail(email);
 
     return res.json({
       success: true,

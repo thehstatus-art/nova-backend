@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer"
 
+
 /* ===============================
    CREATE EMAIL TRANSPORTER
 ================================ */
@@ -13,7 +14,53 @@ const transporter = nodemailer.createTransport({
     pass: process.env.ZOHO_APP_PASSWORD
   }
 })
+/* ===============================
+   WELCOME EMAIL (EMAIL SIGNUP)
+================================ */
 
+export const sendWelcomeEmail = async (email) => {
+  try {
+
+    await transporter.sendMail({
+      from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
+      to: email,
+      subject: "Welcome to Nova Peptide Labs",
+
+      html: `
+      <h2>Welcome to Nova Peptide Labs</h2>
+
+      <p>
+      Thank you for joining our research community.
+      </p>
+
+      <p>
+      Nova Peptide Labs provides pharmaceutical-grade research compounds
+      manufactured under strict laboratory standards.
+      </p>
+
+      <p>
+      Explore our available compounds below:
+      </p>
+
+      <a href="https://novapeptidelabs.org/shop">
+      Browse Research Compounds
+      </a>
+
+      <hr/>
+
+      <p>
+      Nova Peptide Labs<br/>
+      Research Compounds for Laboratory Use Only
+      </p>
+      `
+    })
+
+    console.log("📧 Welcome email sent:", email)
+
+  } catch (error) {
+    console.error("❌ Welcome email failed:", error)
+  }
+}
 /* ===============================
    CUSTOMER ORDER CONFIRMATION
 ================================ */

@@ -23,7 +23,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
 
 router.post('/checkout', async (req, res) => {
   try {
-    const { items } = req.body || {}
+    const { items, email } = req.body || {}
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
@@ -68,6 +68,7 @@ router.post('/checkout', async (req, res) => {
       payment_method_types: ['card'],
       line_items: stripeLineItems,
       mode: 'payment',
+      customer_email: email,   // ADD THIS LINE
       success_url:
   'https://novapeptidelabs.org/success?session_id={CHECKOUT_SESSION_ID}',
 cancel_url: 'https://novapeptidelabs.org/cancel',
