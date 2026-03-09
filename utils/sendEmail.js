@@ -199,6 +199,7 @@ Product: ${product.name}
 Remaining Stock: ${product.stock}
 
 Please restock immediately.
+
 `
     })
 
@@ -208,3 +209,63 @@ Please restock immediately.
     console.error("❌ Low stock alert failed:", error)
   }
 }
+/* ===============================
+   ABANDONED CHECKOUT EMAIL
+================================ */
+
+export const sendAbandonedCheckoutEmail = async (email, stage = 1) => {
+  try {
+
+    let subject = "Complete your research order";
+    let message = "";
+
+    if (stage === 1) {
+      message = `
+      <p>You started checkout but didn’t complete your order.</p>
+      <p>Your research compounds are still available.</p>
+      `;
+    }
+
+    if (stage === 2) {
+      message = `
+      <p>Your checkout session is still open.</p>
+      <p>Complete your order before inventory runs out.</p>
+      `;
+    }
+
+    if (stage === 3) {
+      message = `
+      <p>Your research cart is still waiting.</p>
+      <p><strong>Use code COMPLETE10 for 10% off your order.</strong></p>
+      `;
+    }
+
+    await transporter.sendMail({
+      from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
+      to: email,
+      subject: subject,
+
+      html: `
+      <h2>${subject}</h2>
+
+      ${message}
+
+      <a href="https://novapeptidelabs.org/shop">
+      Return to Checkout
+      </a>
+
+      <hr/>
+
+      <p>
+      Nova Peptide Labs<br/>
+      Research Compounds for Laboratory Use Only
+      </p>
+      `
+    });
+
+    console.log("📧 Abandoned checkout email sent:", email);
+
+  } catch (error) {
+    console.error("❌ Abandoned checkout email failed:", error);
+  }
+};
