@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 dotenv.config();
-import fetch from "node-fetch";
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -36,28 +35,6 @@ io.on("connection", (socket) => {
   console.log("⚡ Client connected for live notifications");
 });
 
-/* ================= BASIC MIDDLEWARE ================= */
-
-app.use(express.json());
-app.use(cors());
-app.use(helmet());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-
-/* ================= DATABASE ================= */
-
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-    process.exit(1);
-  });
-
-/* ================= ROUTES ================= */
-
-app.use("/api/products", productRoutes);
-app.use("/api/orders", orderRoutes);
-
 /* ================= STRIPE WEBHOOK ================= */
 
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
@@ -81,12 +58,34 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 
     console.log("💰 Stripe payment completed:", session.id);
 
-    // You can later update the order in MongoDB here
-    // Example: mark order as paid
+    // TODO: update the corresponding order in MongoDB
+    // mark order as paid and reduce inventory
   }
 
   res.json({ received: true });
 });
+
+/* ================= BASIC MIDDLEWARE ================= */
+
+app.use(express.json());
+app.use(cors());
+app.use(helmet());
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+
+/* ================= DATABASE ================= */
+
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+  });
+
+/* ================= ROUTES ================= */
+
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
 
 /* ================= SHIPPO CONFIG ================= */
 
