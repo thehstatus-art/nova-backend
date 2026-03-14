@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer"
-
+import Order from "../models/Order.js"
 
 /* ===============================
    CREATE EMAIL TRANSPORTER
@@ -27,31 +27,67 @@ export const sendWelcomeEmail = async (email) => {
       subject: "Welcome to Nova Peptide Labs",
 
       html: `
-      <h2>Welcome to Nova Peptide Labs</h2>
 
-      <p>
-      Thank you for joining our research community.
-      </p>
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:auto;background:#081523;color:#ffffff;padding:30px;border-radius:10px">
 
-      <p>
-      Nova Peptide Labs provides pharmaceutical-grade research compounds
-      manufactured under strict laboratory standards.
-      </p>
+  <div style="text-align:center;margin-bottom:20px">
+    <img src="https://novapeptidelabs.org/logo.png" alt="Nova Peptide Labs" style="width:180px" />
+  </div>
 
-      <p>
-      Explore our available compounds below:
-      </p>
+  <h2 style="color:#6ec1ff;text-align:center">Welcome to the Nova Research Network</h2>
 
-      <a href="https://novapeptidelabs.org/shop">
-      Browse Research Compounds
-      </a>
+  <p style="text-align:center">
+  You are now part of the Nova Peptide Labs research community.
+  Stay updated on new compound releases, limited lab batches, and restock alerts.
+  </p>
 
-      <hr/>
+  <div style="text-align:center;margin:30px 0">
+    <a href="https://novapeptidelabs.org/shop"
+       style="background:#6ec1ff;color:#081523;padding:14px 26px;text-decoration:none;border-radius:6px;font-weight:bold">
+       Explore Research Compounds
+    </a>
+  </div>
 
-      <p>
-      Nova Peptide Labs<br/>
-      Research Compounds for Laboratory Use Only
-      </p>
+  <h3 style="color:#6ec1ff;margin-top:30px">Current Research Compounds</h3>
+
+  <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:15px">
+
+    <div style="text-align:center;width:120px">
+      <img src="https://novapeptidelabs.org/images/retatrutide.jpg" width="100" />
+      <p style="font-size:12px">Retatrutide</p>
+    </div>
+
+    <div style="text-align:center;width:120px">
+      <img src="https://novapeptidelabs.org/images/tesamorelin.jpg" width="100" />
+      <p style="font-size:12px">Tesamorelin</p>
+    </div>
+
+    <div style="text-align:center;width:120px">
+      <img src="https://novapeptidelabs.org/images/ghkcu.jpg" width="100" />
+      <p style="font-size:12px">GHK-Cu</p>
+    </div>
+
+    <div style="text-align:center;width:120px">
+      <img src="https://novapeptidelabs.org/images/bpc157.jpg" width="100" />
+      <p style="font-size:12px">BPC‑157</p>
+    </div>
+
+  </div>
+
+  <p style="margin-top:30px;font-size:13px;color:#9bb3c9">
+  Nova Peptide Labs provides laboratory research compounds intended strictly for
+  scientific investigation. Products are not approved for human consumption.
+  </p>
+
+  <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1)" />
+
+  <p style="font-size:12px;color:#7a8fa6;text-align:center">
+  Nova Peptide Labs<br/>
+  Research Compounds for Laboratory Use Only
+  </p>
+
+</div>
+
       `
     })
 
@@ -69,7 +105,16 @@ export const sendOrderConfirmation = async (order, toEmail) => {
   try {
 
     const itemsList = order.items
-      .map(item => `<li>${item.name} × ${item.quantity} — $${item.price}</li>`)
+      .map(item => {
+        const subtotal = item.price * item.quantity
+        return `
+      <tr>
+        <td style="padding:8px 0">${item.name}</td>
+        <td style="padding:8px 0;text-align:center">${item.quantity}</td>
+        <td style="padding:8px 0;text-align:right">$${subtotal}</td>
+      </tr>
+    `
+      })
       .join("")
 
     await transporter.sendMail({
@@ -78,30 +123,63 @@ export const sendOrderConfirmation = async (order, toEmail) => {
       subject: "Nova Peptide Labs — Order Confirmation",
 
       html: `
-      <h2>Thank you for your order</h2>
 
-      <p>Your order has been received and is now being processed.</p>
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:auto;background:#081523;color:#ffffff;padding:30px;border-radius:10px">
 
-      <h3>Order Details</h3>
+  <div style="text-align:center;margin-bottom:20px">
+    <img src="https://novapeptidelabs.org/logo.png" style="width:180px" />
+  </div>
 
-      <p><strong>Order ID:</strong> ${order._id}</p>
-      <p><strong>Total:</strong> $${order.totalAmount}</p>
+  <h2 style="color:#6ec1ff;text-align:center">Order Confirmation</h2>
 
-      <ul>
-        ${itemsList}
-      </ul>
+  <p style="text-align:center">
+  Your research order has been received and is now being processed.
+  </p>
 
-      <p>
-      You will receive another email when your order ships.
-      </p>
+  <div style="margin-top:20px;background:#0f2236;padding:15px;border-radius:6px">
 
-      <hr/>
+    <p><strong>Order ID:</strong> ${order._id}</p>
+    <p><strong>Total:</strong> $${order.totalAmount}</p>
 
-      <p>
-      Nova Peptide Labs<br/>
-      Research Compounds for Laboratory Use Only
-      </p>
-      `
+  </div>
+
+  <h3 style="margin-top:25px;color:#6ec1ff">Items Purchased</h3>
+
+  <table style="width:100%;border-collapse:collapse;margin-top:10px">
+    <thead>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.1)">
+        <th style="text-align:left;padding:6px 0">Compound</th>
+        <th style="text-align:center;padding:6px 0">Qty</th>
+        <th style="text-align:right;padding:6px 0">Subtotal</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      ${itemsList}
+    </tbody>
+
+  </table>
+
+  <p style="margin-top:25px">
+  You will receive another email once your order ships with tracking information.
+  </p>
+
+  <div style="text-align:center;margin:30px 0">
+    <a href="https://novapeptidelabs.org/shop"
+       style="background:#6ec1ff;color:#081523;padding:14px 26px;text-decoration:none;border-radius:6px;font-weight:bold">
+       Visit Nova Peptide Labs
+    </a>
+  </div>
+
+  <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1)" />
+
+  <p style="font-size:12px;color:#7a8fa6;text-align:center">
+  Nova Peptide Labs — Research Compounds for Laboratory Use Only
+  </p>
+
+</div>
+
+`
     })
 
     console.log("📧 Confirmation email sent to:", toEmail)
@@ -111,6 +189,11 @@ export const sendOrderConfirmation = async (order, toEmail) => {
   }
 }
 
+// Alias used by order routes
+export const sendOrderConfirmationEmail = async (email, order) => {
+  return sendOrderConfirmation(order, email)
+}
+
 /* ===============================
    ADMIN SALE ALERT
 ================================ */
@@ -118,17 +201,30 @@ export const sendOrderConfirmation = async (order, toEmail) => {
 export const sendAdminSaleAlert = async (order) => {
   try {
 
+    const itemsList = order.items
+      .map(item => {
+        const subtotal = item.price * item.quantity
+        return `• ${item.name} × ${item.quantity} — $${subtotal}`
+      })
+      .join("\n")
+
     await transporter.sendMail({
       from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
       to: process.env.ZOHO_EMAIL,
       subject: `💰 New Sale - $${order.totalAmount}`,
 
       text: `
-New Order Received 🚀
+🚨 NEW ORDER RECEIVED
 
 Order ID: ${order._id}
+Customer Email: ${order.customerEmail || order.email}
+
+Items:
+${itemsList}
+
 Total: $${order.totalAmount}
-Customer: ${order.customerEmail}
+
+Login to admin dashboard to print shipping label.
 `
     })
 
@@ -137,6 +233,11 @@ Customer: ${order.customerEmail}
   } catch (error) {
     console.error("❌ Admin alert failed:", error)
   }
+}
+
+// Alias used by order routes
+export const sendAdminOrderNotification = async (order) => {
+  return sendAdminSaleAlert(order)
 }
 
 /* ===============================
@@ -148,7 +249,7 @@ export const sendTrackingEmail = async (order) => {
 
     await transporter.sendMail({
       from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
-      to: order.customerEmail,
+      to: order.customerEmail || order.email,
       subject: "📦 Your Order Has Shipped",
 
       html: `
@@ -216,6 +317,14 @@ Please restock immediately.
 export const sendAbandonedCheckoutEmail = async (email, stage = 1) => {
   try {
 
+    // Prevent sending abandoned email if customer already completed an order
+    const latestOrder = await Order.findOne({ email }).sort({ createdAt: -1 });
+
+    if (latestOrder && (latestOrder.isPaid || latestOrder.status === "paid")) {
+      console.log("⛔ Abandoned email cancelled — order already paid:", email);
+      return;
+    }
+
     let subject = "Complete your research order";
     let message = "";
 
@@ -244,23 +353,39 @@ export const sendAbandonedCheckoutEmail = async (email, stage = 1) => {
       from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
       to: email,
       subject: subject,
-
       html: `
-      <h2>${subject}</h2>
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:auto;padding:20px;background:#0b1724;color:#ffffff;border-radius:8px">
 
-      ${message}
+  <h2 style="color:#6ec1ff">${subject}</h2>
 
-      <a href="https://novapeptidelabs.org/shop">
-      Return to Checkout
-      </a>
+  ${message}
 
-      <hr/>
+  <p style="margin-top:20px">
+  Your selected research compounds are still reserved temporarily.
+  Complete your order before stock becomes unavailable.
+  </p>
 
-      <p>
-      Nova Peptide Labs<br/>
-      Research Compounds for Laboratory Use Only
-      </p>
-      `
+  <div style="text-align:center;margin:30px 0">
+    <a href="https://novapeptidelabs.org/shop"
+       style="background:#6ec1ff;color:#081523;padding:14px 26px;text-decoration:none;border-radius:6px;font-weight:bold">
+       Resume Checkout
+    </a>
+  </div>
+
+  <p style="font-size:13px;color:#9bb3c9">
+  Nova Peptide Labs provides laboratory research compounds intended strictly for
+  scientific investigation. Products are not approved for human consumption.
+  </p>
+
+  <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1)" />
+
+  <p style="font-size:12px;color:#7a8fa6">
+  Nova Peptide Labs<br/>
+  Research Compounds for Laboratory Use Only
+  </p>
+
+</div>
+`
     });
 
     console.log("📧 Abandoned checkout email sent:", email);
@@ -269,3 +394,63 @@ export const sendAbandonedCheckoutEmail = async (email, stage = 1) => {
     console.error("❌ Abandoned checkout email failed:", error);
   }
 };
+
+/* ===============================
+   NEWSLETTER BROADCAST EMAIL
+================================ */
+
+export const sendNewsletterBlast = async (emails, subject, contentHtml) => {
+  try {
+
+    if (!emails || emails.length === 0) {
+      console.log("No subscribers found for newsletter.")
+      return
+    }
+
+    await transporter.sendMail({
+      from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
+
+      // send to yourself but BCC all subscribers
+      to: process.env.ZOHO_EMAIL,
+      bcc: emails,
+
+      subject: subject,
+
+      html: `
+
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:auto;background:#081523;color:#ffffff;padding:30px;border-radius:10px">
+
+  <div style="text-align:center;margin-bottom:20px">
+    <img src="https://novapeptidelabs.org/logo.png" style="width:180px" />
+  </div>
+
+  <h2 style="color:#6ec1ff;text-align:center">Nova Research Network Update</h2>
+
+  <div style="margin-top:20px;font-size:15px;line-height:1.6">
+    ${contentHtml}
+  </div>
+
+  <div style="text-align:center;margin:30px 0">
+    <a href="https://novapeptidelabs.org/shop"
+       style="background:#6ec1ff;color:#081523;padding:14px 26px;text-decoration:none;border-radius:6px;font-weight:bold">
+       Visit Nova Peptide Labs
+    </a>
+  </div>
+
+  <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1)" />
+
+  <p style="font-size:12px;color:#7a8fa6;text-align:center">
+  Nova Peptide Labs — Research Compounds for Laboratory Use Only
+  </p>
+
+</div>
+
+      `
+    })
+
+    console.log("📢 Newsletter sent to subscribers")
+
+  } catch (error) {
+    console.error("❌ Newsletter send failed:", error)
+  }
+}

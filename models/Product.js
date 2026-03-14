@@ -30,6 +30,12 @@ const batchSchema = new mongoose.Schema(
     active: {
       type: Boolean,
       default: true
+    },
+    // inventory for this specific batch
+    stock: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   },
   { _id: true }
@@ -149,4 +155,22 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
+
+/* ======================
+   AUTO SYNC TOTAL STOCK
+====================== */
+
+productSchema.pre("save", function (next) {
+
+  if (this.batches && this.batches.length > 0) {
+
+    const total = this.batches.reduce((sum, batch) => {
+      return sum + (batch.stock || 0)
+    }, 0)
+
+    this.stock = total
+  }
+
+  next()
+})
 export default mongoose.model("Product", productSchema)

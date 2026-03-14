@@ -3,55 +3,142 @@ import Stripe from 'stripe'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import { protect, isAdmin } from '../middleware/auth.js'
-import { sendAbandonedCheckoutEmail } from '../utils/sendEmail.js'
+import { sendAbandonedCheckoutEmail, sendOrderConfirmationEmail, sendAdminOrderNotification } from '../utils/sendEmail.js'
+
 const router = express.Router()
 
-/* =========================================
-   🔐 STRIPE INITIALIZATION
-========================================= */
+/* ===============================
+   STRIPE INITIALIZATION
+================================ */
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error("❌ STRIPE_SECRET_KEY missing")
-  process.exit(1)
-}
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET
 
-/* =========================================
-   CHECKOUT ROUTE (PUBLIC)
-========================================= */
+/* ===============================
+   STRIPE WEBHOOK (CONFIRM PAYMENT)
+================================ */
+
+router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+
+  let event
+
+  try {
+
+    const sig = req.headers['stripe-signature']
+
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      endpointSecret
+    )
+
+  } catch (err) {
+
+    console.error('Stripe webhook signature failed:', err.message)
+
+    return res.status(400).send(`Webhook Error: ${err.message}`)
+
+  }
+
+  if (event.type === 'checkout.session.completed') {
+
+    const session = event.data.object
+
+    try {
+
+      const order = await Order.findOne({ stripeSessionId: session.id })
+
+      if (!order) {
+        console.error('Stripe order not found:', session.id)
+        return res.json({ received: true })
+      }
+
+      if (order.isPaid) {
+        return res.json({ received: true })
+      }
+
+      order.isPaid = true
+      order.status = 'paid'
+
+      for (const item of order.items) {
+
+        const product = await Product.findById(item.product)
+
+        if (!product) continue
+
+        product.stock -= item.quantity
+
+        if (product.stock < 0) product.stock = 0
+
+        await product.save()
+
+      }
+
+      await order.save()
+
+      try {
+
+        if (order.email) {
+          await sendOrderConfirmationEmail(order, order.email)
+        }
+
+        await sendAdminOrderNotification(order)
+
+      } catch (mailErr) {
+
+        console.error('Email notification error:', mailErr)
+
+      }
+
+      console.log('Stripe order confirmed:', order._id)
+
+    } catch (err) {
+
+      console.error('Stripe webhook processing error:', err)
+
+    }
+
+  }
+
+  res.json({ received: true })
+
+})
+
+/* ===============================
+   CREATE STRIPE CHECKOUT
+================================ */
 
 router.post('/checkout', async (req, res) => {
   try {
-    const { items, email } = req.body || {}
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    const { items, email } = req.body
+
+    if (!items || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
     }
 
-    let stripeLineItems = []
+    let stripeItems = []
     let orderItems = []
     let totalAmount = 0
 
     for (const item of items) {
+
       const product = await Product.findById(item.productId)
 
-      if (!product)
+      if (!product) {
         return res.status(404).json({ message: 'Product not found' })
+      }
 
-      if (product.stock < item.quantity)
-        return res.status(400).json({
-          message: `Not enough stock for ${product.name}`
-        })
+      if (product.stock < item.quantity) {
+        return res.status(400).json({ message: `Not enough stock for ${product.name}` })
+      }
 
-      const unitAmount = Math.round(product.price * 100)
-      totalAmount += product.price * item.quantity
-
-      stripeLineItems.push({
+      stripeItems.push({
         price_data: {
           currency: 'usd',
           product_data: { name: product.name },
-          unit_amount: unitAmount
+          unit_amount: Math.round(product.price * 100)
         },
         quantity: item.quantity
       })
@@ -62,112 +149,142 @@ router.post('/checkout', async (req, res) => {
         price: product.price,
         quantity: item.quantity
       })
+
+      totalAmount += product.price * item.quantity
+
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: stripeLineItems,
-      mode: 'payment',
-      customer_email: email,   // ADD THIS LINE
-      success_url:
-  'https://novapeptidelabs.org/success?session_id={CHECKOUT_SESSION_ID}',
-cancel_url: 'https://novapeptidelabs.org/cancel',
-      shipping_address_collection: {
-        allowed_countries: ['US']
-      }
-    })
-
-    await Order.create({
+    const order = await Order.create({
       items: orderItems,
       totalAmount,
-      stripeSessionId: session.id,
+      email,
       isPaid: false,
       status: 'pending'
     })
-    /* ===============================
-   ABANDONED CHECKOUT EMAILS
-================================ */
 
-setTimeout(() => {
-  sendAbandonedCheckoutEmail(email, 1)
-}, 1000 * 60 * 30) // 30 minutes
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: stripeItems,
+      mode: 'payment',
+      customer_email: email,
+      success_url: 'https://novapeptidelabs.org/success?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: 'https://novapeptidelabs.org/cancel',
+      metadata: {
+        orderId: order._id.toString()
+      }
+    })
 
-setTimeout(() => {
-  sendAbandonedCheckoutEmail(email, 2)
-}, 1000 * 60 * 60 * 6) // 6 hours
+    order.stripeSessionId = session.id
+    await order.save()
 
-setTimeout(() => {
-  sendAbandonedCheckoutEmail(email, 3)
-}, 1000 * 60 * 60 * 24) // 24 hours
+    setTimeout(() => sendAbandonedCheckoutEmail(email, 1), 1000 * 60 * 30)
+    setTimeout(() => sendAbandonedCheckoutEmail(email, 2), 1000 * 60 * 60 * 6)
+    setTimeout(() => sendAbandonedCheckoutEmail(email, 3), 1000 * 60 * 60 * 24)
 
     res.json({ url: session.url })
 
-  } catch (error) {
-    console.error('🔥 Checkout error:', error)
+  } catch (err) {
+    console.error('Checkout error:', err)
     res.status(500).json({ message: 'Checkout failed' })
   }
 })
 
-/* =========================================
-   GET ORDER BY STRIPE SESSION
-========================================= */
+/* ===============================
+   PAYPAL ORDER SAVE
+================================ */
 
-router.get('/by-session/:sessionId', async (req, res) => {
+router.post('/paypal', async (req, res) => {
   try {
-    const order = await Order.findOne({
-      stripeSessionId: req.params.sessionId
+
+    const { items, email, paypalOrderId } = req.body
+
+    let orderItems = []
+    let totalAmount = 0
+
+    for (const item of items) {
+
+      const product = await Product.findById(item.productId)
+
+      if (!product) continue
+
+      product.stock -= item.quantity
+      if (product.stock < 0) product.stock = 0
+
+      await product.save()
+
+      orderItems.push({
+        product: product._id,
+        name: product.name,
+        price: product.price,
+        quantity: item.quantity
+      })
+
+      totalAmount += product.price * item.quantity
+
+    }
+
+    const order = await Order.create({
+      items: orderItems,
+      totalAmount,
+      paypalOrderId,
+      email,
+      isPaid: true,
+      status: 'paid'
     })
 
-    if (!order)
-      return res.status(404).json({ message: 'Order not found' })
+    if (email) {
+      await sendOrderConfirmationEmail(order, email)
+    }
 
-    res.json(order)
+    await sendAdminOrderNotification(order)
 
-  } catch {
-    res.status(500).json({ message: 'Failed to fetch order' })
+    res.json({ success: true, orderId: order._id })
+
+  } catch (err) {
+    console.error('PayPal order error:', err)
+    res.status(500).json({ message: 'PayPal order failed' })
   }
 })
 
-/* =========================================
-   REFUND ROUTE (ADMIN ONLY)
-========================================= */
+/* ===============================
+   ADMIN GET ORDERS
+================================ */
 
-router.post('/refund/:id', protect, isAdmin, async (req, res) => {
+router.get('/', protect, isAdmin, async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
 
-    if (!order)
-      return res.status(404).json({ message: 'Order not found' })
+    const orders = await Order.find().sort({ createdAt: -1 })
 
-    if (!order.isPaid)
-      return res.status(400).json({ message: 'Order not paid' })
-
-    if (!order.paymentIntentId)
-      return res.status(400).json({
-        message: 'No payment intent stored on order'
-      })
-
-    await stripe.refunds.create({
-      payment_intent: order.paymentIntentId
-    })
-
-    // Restock products
-    for (const item of order.items) {
-      const product = await Product.findById(item.product)
-      if (!product) continue
-
-      product.stock += item.quantity
-      await product.save()
-    }
-
-    order.status = 'refunded'
-    await order.save()
-
-    res.json({ message: 'Refund successful' })
+    res.json(orders)
 
   } catch (err) {
-    console.error('🔥 Refund error:', err.message)
-    res.status(500).json({ message: 'Refund failed' })
+    console.error('Fetch orders error:', err)
+    res.status(500).json({ message: 'Failed to fetch orders' })
+  }
+})
+
+/* ===============================
+   RECENT ORDERS FOR POPUPS
+================================ */
+
+router.get('/recent-orders', async (req, res) => {
+  try {
+
+    const orders = await Order.find({ isPaid: true })
+      .sort({ createdAt: -1 })
+      .limit(10)
+
+    const recent = orders.map(order => ({
+      product: order.items?.[0]?.name || 'Research Compound',
+      location: 'USA',
+      time: order.createdAt
+    }))
+
+    res.json(recent)
+
+  } catch (err) {
+    console.error('Recent orders error:', err)
+    res.status(500).json({ message: 'Failed to load recent orders' })
   }
 })
 

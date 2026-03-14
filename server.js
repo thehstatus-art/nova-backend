@@ -1,154 +1,113 @@
-import dotenv from 'dotenv'
-dotenv.config()
-import verifyRoutes from "./routes/verifyRoutes.js";
-import express from 'express'
-import mongoose from 'mongoose'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import cors from 'cors'
-import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
-import Stripe from 'stripe'
-import cartRoutes from "./routes/cartRoutes.js"
-import emailRoutes from "./routes/emailRoutes.js";
-import authRoutes from './routes/authRoutes.js'
-import productRoutes from './routes/productRoutes.js'
-import orderRoutes from './routes/orderRoutes.js'
-import batchRoutes from './routes/batchRoutes.js'
-import uploadRoutes from './routes/uploadRoutes.js'
+import dotenv from "dotenv";
+dotenv.config();
+import fetch from "node-fetch";
+import express from "express";
+import mongoose from "mongoose";
+import cors from "cors";
+import helmet from "helmet";
 
-import { protect, isAdmin } from './middleware/auth.js'
-import Order from './models/Order.js'
-import Product from './models/Product.js'
-import {
-  sendOrderConfirmation,
-  sendAdminSaleAlert,
-  
-  sendTrackingEmail
-} from './utils/sendEmail.js'
+import rateLimit from "express-rate-limit";
+import Stripe from "stripe";
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+import http from "http";
+import { Server } from "socket.io";
 
-const app = express()
-app.set('trust proxy', 1)
+
+import productRoutes from "./routes/productRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+const app = express();
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Make io available inside routes
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log("⚡ Client connected for live notifications");
+});
+
+/* ================= BASIC MIDDLEWARE ================= */
+
+app.use(express.json());
+app.use(cors());
+app.use(helmet());
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
 /* ================= DATABASE ================= */
 
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => {
-    console.error('Mongo connection error:', err)
-    process.exit(1)
-  })
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+  });
 
-/* ================= STRIPE ================= */
+/* ================= ROUTES ================= */
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error("❌ STRIPE_SECRET_KEY missing")
-  process.exit(1)
-}
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim())
+/* ================= STRIPE WEBHOOK ================= */
 
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const sig = req.headers["stripe-signature"];
 
+  let event;
 
-/* ================= SHIPPO REST ================= */
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error("Stripe webhook error:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+
+    console.log("💰 Stripe payment completed:", session.id);
+
+    // You can later update the order in MongoDB here
+    // Example: mark order as paid
+  }
+
+  res.json({ received: true });
+});
+
+/* ================= SHIPPO CONFIG ================= */
 
 const SHIPPO_API = "https://api.goshippo.com";
 
 const shippoHeaders = {
   Authorization: `ShippoToken ${process.env.SHIPPO_API_KEY}`,
-  "Content-Type": "application/json"
+  "Content-Type": "application/json",
 };
 
-/* ================= SHIPPING FUNCTION ================= */
+/* ================= SHIPPING RATES ================= */
 
-async function generateShippingLabel(order) {
-
-  if (!process.env.SHIPPO_API_KEY || !order?.shippingDetails || order.shippingLabelUrl)
-    return;
-
+app.post("/api/shipping/rates", async (req, res) => {
   try {
-
-    // 1️⃣ Create shipment
-    const shipmentRes = await fetch(`${SHIPPO_API}/shipments/`, {
-      method: "POST",
-      headers: shippoHeaders,
-      body: JSON.stringify({
-        address_from: {
-          name: "Nova Peptide Labs",
-          street1: "6801 14th ave apt 1",
-          city: "Brooklyn",
-          state: "NY",
-          zip: "11219",
-          country: "US"
-        },
-        address_to: {
-          name: order.shippingDetails.name,
-          street1: order.shippingDetails.address,
-          city: order.shippingDetails.city,
-          state: order.shippingDetails.state,
-          zip: order.shippingDetails.postalCode,
-          country: order.shippingDetails.country
-        },
-        parcels: [{
-          length: "6",
-          width: "4",
-          height: "2",
-          distance_unit: "in",
-          weight: "0.5",
-          mass_unit: "lb"
-        }],
-        async: false
-      })
-    });
-
-    const shipment = await shipmentRes.json();
-
-    const uspsRate = shipment.rates?.find(r => r.provider === "USPS");
-    if (!uspsRate) return;
-
-    // 2️⃣ Buy label
-    const transactionRes = await fetch(`${SHIPPO_API}/transactions/`, {
-      method: "POST",
-      headers: shippoHeaders,
-      body: JSON.stringify({
-        rate: uspsRate.object_id,
-        label_file_type: "PDF",
-        async: false
-      })
-    });
-
-    const transaction = await transactionRes.json();
-
-    if (transaction.status !== "SUCCESS") return;
-
-    order.shippingLabelUrl = transaction.label_url;
-    order.trackingNumber = transaction.tracking_number;
-    order.status = "shipped";
-
-    await order.save();
-
-    if (order.customerEmail)
-      await sendTrackingEmail(order);
-
-    console.log("✅ Shipping label generated:", order._id);
-
-  } catch (err) {
-    console.error("🔥 Shippo API error:", err.message);
-  }
-}
-
-/* ================= LIVE USPS RATES ================= */
-
-app.post('/api/shipping/rates', async (req, res) => {
-  try {
-
     if (!process.env.SHIPPO_API_KEY)
       return res.status(400).json({ message: "Shipping not active" });
 
-    const { address } = req.body;
+    const { zip } = req.body;
+
+    if (!zip)
+      return res.status(400).json({ message: "ZIP code required" });
 
     const shipmentRes = await fetch(`${SHIPPO_API}/shipments/`, {
       method: "POST",
@@ -160,176 +119,59 @@ app.post('/api/shipping/rates', async (req, res) => {
           city: "Brooklyn",
           state: "NY",
           zip: "11219",
-          country: "US"
+          country: "US",
         },
         address_to: {
-          name: address.name,
-          street1: address.line1,
-          city: address.city,
-          state: address.state,
-          zip: address.postalCode,
-          country: address.country
+          zip: zip,
+          country: "US",
         },
-        parcels: [{
-          length: "6",
-          width: "4",
-          height: "2",
-          distance_unit: "in",
-          weight: "0.5",
-          mass_unit: "lb"
-        }],
-        async: false
-      })
+        parcels: [
+          {
+            length: "6",
+            width: "4",
+            height: "2",
+            distance_unit: "in",
+            weight: "0.5",
+            mass_unit: "lb",
+          },
+        ],
+        async: false,
+      }),
     });
 
     const shipment = await shipmentRes.json();
 
-    const rates = shipment.rates
-      ?.filter(r => r.provider === "USPS")
-      .map(r => ({
-        service: r.servicelevel.name,
-        price: r.amount,
-        rateId: r.object_id
-      })) || [];
+    if (!shipment.rates) return res.json([]);
 
-    res.json(rates);
+    const cleanedRates = shipment.rates
+      .filter((rate) => rate.amount && rate.provider)
+      .sort((a, b) => Number(a.amount) - Number(b.amount))
+      .slice(0, 3)
+      .map((rate) => ({
+        provider: rate.provider,
+        service: rate.servicelevel?.name || "Shipping",
+        price: rate.amount,
+        estimated_days: rate.estimated_days || null,
+        rateId: rate.object_id,
+      }));
 
+    res.json(cleanedRates);
   } catch (err) {
-    console.error("Shipping rate error:", err.message);
+    console.error("Shipping rate error:", err);
     res.status(500).json({ message: "Failed to fetch shipping rates" });
   }
 });
-/* ================= STRIPE WEBHOOK ================= */
 
-app.post('/api/webhook',
-  express.raw({ type: 'application/json' }),
-  async (req, res) => {
+/* ================= HEALTH CHECK ================= */
 
-    const sig = req.headers['stripe-signature']
-    if (!sig) return res.status(400).send('Missing Stripe signature')
+app.get("/", (req, res) => {
+  res.send("Nova Backend Running");
+});
 
-    let event
+/* ================= START SERVER ================= */
 
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      )
-    } catch (err) {
-      return res.status(400).send(`Webhook Error: ${err.message}`)
-    }
+const PORT = process.env.PORT || 5050;
 
-    if (event.type !== 'checkout.session.completed')
-      return res.status(200).json({ received: true })
-
-    try {
-      const session = event.data.object
-      const order = await Order.findOne({ stripeSessionId: session.id })
-
-      if (!order || order.isPaid)
-        return res.status(200).json({ received: true })
-
-      order.isPaid = true
-      order.status = "paid"
-      order.paidAt = new Date()
-      order.customerEmail = session.customer_details?.email || ""
-
-      if (session.shipping_details) {
-        order.shippingDetails = {
-          name: session.shipping_details.name,
-          address: session.shipping_details.address.line1,
-          city: session.shipping_details.address.city,
-          state: session.shipping_details.address.state,
-          postalCode: session.shipping_details.address.postal_code,
-          country: session.shipping_details.address.country
-        }
-      }
-
-      await order.save()
-
-      if (order.customerEmail)
-        await sendOrderConfirmation(order, order.customerEmail)
-
-      await sendAdminSaleAlert(order)
-
-      // Reduce stock
-      for (const item of order.items) {
-        const product = await Product.findById(item.product)
-        if (!product) continue
-
-        product.stock -= item.quantity
-        await product.save()
-      }
-
-      // Generate shipping label
-      await generateShippingLabel(order)
-
-      return res.status(200).json({ received: true })
-
-    } catch (err) {
-      console.error("Webhook error:", err)
-      return res.status(500).send('Webhook error')
-    }
-  }
-)
-
-/* ================= BULK LABELS ================= */
-
-app.post('/api/admin/bulk-labels', protect, isAdmin, async (req, res) => {
-
-  const { orderIds } = req.body
-
-  const orders = await Order.find({
-    _id: { $in: orderIds },
-    isPaid: true,
-    shippingLabelUrl: { $exists: false }
-  })
-
-  for (const order of orders)
-    await generateShippingLabel(order)
-
-  res.json({ message: "Bulk labels processed" })
-})
-
-/* ================= SHIPPING DASHBOARD ================= */
-
-app.get('/api/admin/shipping', protect, isAdmin, async (req, res) => {
-
-  const orders = await Order.find({ isPaid: true })
-    .sort({ createdAt: -1 })
-
-  res.json(orders.map(order => ({
-    id: order._id,
-    email: order.customerEmail,
-    status: order.status,
-    tracking: order.trackingNumber,
-    label: order.shippingLabelUrl
-  })))
-})
-
-/* ================= MIDDLEWARE ================= */
-
-app.use(express.json())
-app.use(helmet())
-app.use(cors({ origin: true, credentials: true }))
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }))
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
-
-/* ================= ROUTES ================= */
-
-app.use('/api/products', productRoutes)
-app.use('/api/orders', orderRoutes)
-app.use('/api/batch', batchRoutes)
-app.use('/api/auth', authRoutes)
-app.use('/api/upload', uploadRoutes)
-app.use("/api/cart", cartRoutes)
-app.use("/api/email", emailRoutes);
-app.use("/api/verify", verifyRoutes);
-/* ================= START ================= */
-
-const PORT = process.env.PORT || 5050
-
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`)
-})
+server.listen(PORT, () => {
+  console.log(`🚀 Backend running with realtime notifications on port ${PORT}`);
+});
