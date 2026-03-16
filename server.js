@@ -16,6 +16,7 @@ import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import subscriberRoutes from "./routes/subscriberRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
+import Order from "./models/Order.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -90,6 +91,31 @@ app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/subscribers", subscriberRoutes);
 app.use("/api/newsletter", newsletterRoutes);
+
+/* ================= ADMIN ANALYTICS ================= */
+
+app.get("/api/admin/analytics", async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayOrders = await Order.find({ createdAt: { $gte: today } });
+    const allOrders = await Order.find();
+
+    const todayRevenue = todayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    const totalRevenue = allOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+    res.json({
+      todayOrders: todayOrders.length,
+      totalOrders: allOrders.length,
+      todayRevenue,
+      totalRevenue
+    });
+  } catch (err) {
+    console.error("Analytics error:", err);
+    res.status(500).json({ message: "Analytics failed" });
+  }
+});
 
 /* ================= SHIPPO CONFIG ================= */
 
