@@ -1,4 +1,3 @@
-import { sendEmail } from "../utils/sendEmail.js";
 import nodemailer from "nodemailer";
 
 /* ===============================
