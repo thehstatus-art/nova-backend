@@ -1,6 +1,6 @@
 import express from "express";
 import Subscriber from "../models/Subscriber.js";
-import sendEmail from "../utils/sendEmail.js";
+import { sendEmail } from "../utils/sendEmail.js";
 
 const router = express.Router();
 
