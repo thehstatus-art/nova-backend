@@ -106,3 +106,24 @@ export const sendNewsletterBlast = async (emails, subject, contentHtml) => {
     console.error("❌ Newsletter failed:", error);
   }
 };
+
+/* ===============================
+   BACKWARD COMPATIBILITY EXPORTS
+   (used by existing routes)
+================================ */
+
+export const sendOrderConfirmationEmail = sendOrderConfirmation;
+export const sendAdminOrderNotification = sendAdminSaleAlert;
+
+export const sendAbandonedCheckoutEmail = async (email) => {
+  return sendEmail({
+    to: email,
+    subject: "Nova Peptide Labs — Incomplete Checkout",
+    html: `
+      <h2>Your research order is waiting</h2>
+      <p>You started a checkout but did not complete it.</p>
+      <p>You can return to the lab anytime:</p>
+      <a href="https://novapeptidelabs.org/shop">Return to Nova Lab</a>
+    `
+  });
+};
