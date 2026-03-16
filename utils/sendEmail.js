@@ -10,8 +10,8 @@ const transporter = nodemailer.createTransport({
   secure: true,
   auth: {
     user: process.env.ZOHO_EMAIL,
-    pass: process.env.ZOHO_APP_PASSWORD
-  }
+    pass: process.env.ZOHO_APP_PASSWORD,
+  },
 });
 
 /* ===============================
@@ -25,7 +25,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
       to,
       subject,
       html,
-      text
+      text,
     });
 
     console.log("📧 Email sent:", to);
@@ -47,7 +47,7 @@ export const sendWelcomeEmail = async (email) => {
       <p>You are now subscribed to Nova Peptide Labs updates.</p>
       <p>Visit the lab:</p>
       <a href="https://novapeptidelabs.org/shop">Explore Research Compounds</a>
-    `
+    `,
   });
 };
 
@@ -69,7 +69,7 @@ export const sendOrderConfirmation = async (order, email) => {
       <p>Total: $${order.totalAmount}</p>
       <h3>Items</h3>
       <p>${items}</p>
-    `
+    `,
   });
 };
 
@@ -81,7 +81,7 @@ export const sendAdminSaleAlert = async (order) => {
   return sendEmail({
     to: process.env.ZOHO_EMAIL,
     subject: `💰 New Sale - $${order.totalAmount}`,
-    text: `New order received: ${order._id}`
+    text: `New order received: ${order._id}`,
   });
 };
 
@@ -98,7 +98,7 @@ export const sendNewsletterBlast = async (emails, subject, contentHtml) => {
       to: process.env.ZOHO_EMAIL,
       bcc: emails,
       subject,
-      html: contentHtml
+      html: contentHtml,
     });
 
     console.log("📢 Newsletter sent to subscribers");
@@ -109,7 +109,6 @@ export const sendNewsletterBlast = async (emails, subject, contentHtml) => {
 
 /* ===============================
    BACKWARD COMPATIBILITY EXPORTS
-   (used by existing routes)
 ================================ */
 
 export const sendOrderConfirmationEmail = sendOrderConfirmation;
@@ -124,6 +123,6 @@ export const sendAbandonedCheckoutEmail = async (email) => {
       <p>You started a checkout but did not complete it.</p>
       <p>You can return to the lab anytime:</p>
       <a href="https://novapeptidelabs.org/shop">Return to Nova Lab</a>
-    `
+    `,
   });
 };
