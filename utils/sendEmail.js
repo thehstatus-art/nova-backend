@@ -14,6 +14,23 @@ const transporter = nodemailer.createTransport({
     pass: process.env.ZOHO_APP_PASSWORD
   }
 })
+
+// Generic email sender used by routes like newsletterRoutes
+export const sendEmail = async ({ to, subject, html, text }) => {
+  try {
+    await transporter.sendMail({
+      from: `"Nova Peptide Labs" <${process.env.ZOHO_EMAIL}>`,
+      to,
+      subject,
+      html,
+      text
+    });
+
+    console.log("📧 Generic email sent:", to);
+  } catch (error) {
+    console.error("❌ Generic email failed:", error);
+  }
+};
 /* ===============================
    WELCOME EMAIL (EMAIL SIGNUP)
 ================================ */
