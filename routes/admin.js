@@ -1,6 +1,8 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const Order = require("../models/Order");
+const Subscriber = require("../models/Subscriber");
+const { sendEmail } = require("../utils/sendEmail");
 const shippo = require("shippo")(process.env.SHIPPO_API_KEY);
 
 const router = express.Router();
@@ -275,4 +277,56 @@ router.get("/orders/:id/label", protect, async (req, res) => {
     res.status(500).json({ message: "Failed to fetch label" });
   }
 });
+
+/* =========================================
+   SEND NEWSLETTER TO ALL SUBSCRIBERS
+========================================= */
+
+router.post("/newsletter/send", protect, async (req, res) => {
+  try {
+
+    const subscribers = await Subscriber.find();
+
+    if (!subscribers.length) {
+      return res.json({ message: "No subscribers found" });
+    }
+
+    for (const sub of subscribers) {
+
+      await sendEmail({
+        to: sub.email,
+        subject: "Nova Research Network Update",
+        html: `
+          <div style="font-family:Arial;padding:30px">
+
+            <h2>Nova Peptide Labs Research Network</h2>
+
+            <p>
+            New research compounds and verified batches are now available.
+            Visit the research catalog to explore the latest releases.
+            </p>
+
+            <a href="https://novapeptidelabs.org/shop"
+            style="background:#0ea5e9;color:white;padding:14px 22px;text-decoration:none;border-radius:6px">
+            View Research Catalog
+            </a>
+
+            <p style="margin-top:20px;font-size:12px;color:#888">
+            You are receiving this because you joined the Nova Research Network.
+            </p>
+
+          </div>
+        `
+      });
+
+    }
+
+    res.json({ message: `Newsletter sent to ${subscribers.length} subscribers` });
+
+  } catch (err) {
+    console.error("Newsletter send error:", err);
+    res.status(500).json({ message: "Failed to send newsletter" });
+  }
+});
+
 module.exports = router;

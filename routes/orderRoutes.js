@@ -3,7 +3,30 @@ import Stripe from 'stripe'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import { protect, isAdmin } from '../middleware/auth.js'
+
 import { sendAbandonedCheckoutEmail, sendOrderConfirmationEmail, sendAdminOrderNotification } from '../utils/sendEmail.js'
+
+// helper to emit real purchase notifications
+const emitPurchaseEvent = (req, order) => {
+  try {
+    const io = req.app.get('io')
+    if (!io) return
+
+    const firstItem = order.items?.[0]
+
+    io.emit('purchase', {
+      product: firstItem?.name || 'Research Compound',
+      location: 'USA',
+      time: new Date()
+    })
+
+    // send full order to admin dashboard for live updates
+    io.emit('new-order', order)
+
+  } catch (err) {
+    console.error('Socket emit failed:', err)
+  }
+}
 
 const router = express.Router()
 
@@ -92,6 +115,8 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
       }
 
       console.log('Stripe order confirmed:', order._id)
+
+      emitPurchaseEvent(req, order)
 
     } catch (err) {
 
@@ -237,6 +262,8 @@ router.post('/paypal', async (req, res) => {
     }
 
     await sendAdminOrderNotification(order)
+
+    emitPurchaseEvent(req, order)
 
     res.json({ success: true, orderId: order._id })
 
