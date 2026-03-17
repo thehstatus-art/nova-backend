@@ -24,10 +24,16 @@ const app = express();
 
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  "https://novapeptidelabs.org",
+  "https://www.novapeptidelabs.org"
+];
+
 const io = new Server(server, {
   cors: {
-    origin: "https://novapeptidelabs.org",
-    methods: ["GET", "POST"]
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -71,7 +77,10 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 /* ================= BASIC MIDDLEWARE ================= */
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 app.use(helmet());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
