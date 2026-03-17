@@ -16,6 +16,7 @@ import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import subscriberRoutes from "./routes/subscriberRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
+import restockRoutes from "./routes/restockRoutes.js";
 import Order from "./models/Order.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -100,6 +101,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/subscribers", subscriberRoutes);
 app.use("/api/newsletter", newsletterRoutes);
+app.use("/api/restock", restockRoutes);
 
 /* ================= ADMIN ANALYTICS ================= */
 
