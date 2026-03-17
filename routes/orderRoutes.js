@@ -214,6 +214,63 @@ router.post('/checkout', async (req, res) => {
   }
 })
 
+// Generic order save (used by frontend checkout)
+router.post('/', async (req, res) => {
+  try {
+
+    const { items, email, paypalOrderId, totalAmount } = req.body
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: 'No items provided' })
+    }
+
+    let orderItems = []
+
+    for (const item of items) {
+
+      const product = await Product.findById(item.productId)
+
+      if (!product) continue
+
+      product.stock -= item.quantity
+      if (product.stock < 0) product.stock = 0
+
+      await product.save()
+
+      orderItems.push({
+        product: product._id,
+        name: product.name,
+        price: product.price,
+        quantity: item.quantity
+      })
+
+    }
+
+    const order = await Order.create({
+      items: orderItems,
+      totalAmount,
+      paypalOrderId,
+      email,
+      isPaid: true,
+      status: 'paid'
+    })
+
+    if (email) {
+      await sendOrderConfirmationEmail(order, email)
+    }
+
+    await sendAdminOrderNotification(order)
+
+    emitPurchaseEvent(req, order)
+
+    res.json({ success: true, orderId: order._id })
+
+  } catch (err) {
+    console.error('Generic order save error:', err)
+    res.status(500).json({ message: 'Order save failed' })
+  }
+})
+
 /* ===============================
    PAYPAL ORDER SAVE
 ================================ */
