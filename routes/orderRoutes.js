@@ -219,7 +219,7 @@ router.post('/checkout', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
 
-    const { items, email, paypalOrderId, totalAmount } = req.body
+    const { items, email, paypalOrderId, totalAmount, shippingAddress } = req.body
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
@@ -252,6 +252,7 @@ router.post('/', async (req, res) => {
       totalAmount,
       paypalOrderId,
       email,
+      shippingAddress,
       isPaid: true,
       status: 'paid'
     })
@@ -286,7 +287,7 @@ router.post('/', async (req, res) => {
 router.post('/paypal', async (req, res) => {
   try {
 
-    const { items, email, paypalOrderId } = req.body
+    const { items, email, paypalOrderId, shippingAddress } = req.body
 
     let orderItems = []
     let totalAmount = 0
@@ -318,6 +319,7 @@ router.post('/paypal', async (req, res) => {
       totalAmount,
       paypalOrderId,
       email,
+      shippingAddress,
       isPaid: true,
       status: 'paid'
     })
