@@ -5,6 +5,7 @@ import Product from '../models/Product.js'
 import { protect, isAdmin } from '../middleware/auth.js'
 
 import { sendAbandonedCheckoutEmail, sendOrderConfirmationEmail, sendAdminOrderNotification } from '../utils/sendEmail.js'
+import { createShippoLabel } from '../utils/createShippoLabel.js'
 
 // helper to emit real purchase notifications
 const emitPurchaseEvent = (req, order) => {
@@ -255,6 +256,13 @@ router.post('/', async (req, res) => {
       status: 'paid'
     })
 
+    // create Shippo label automatically
+    const labelUrl = await createShippoLabel(order)
+    if (labelUrl) {
+      order.shippingLabelUrl = labelUrl
+      await order.save()
+    }
+
     if (email) {
       await sendOrderConfirmationEmail(order, email)
     }
@@ -313,6 +321,13 @@ router.post('/paypal', async (req, res) => {
       isPaid: true,
       status: 'paid'
     })
+
+    // create Shippo label automatically
+    const labelUrl = await createShippoLabel(order)
+    if (labelUrl) {
+      order.shippingLabelUrl = labelUrl
+      await order.save()
+    }
 
     if (email) {
       await sendOrderConfirmationEmail(order, email)
