@@ -47,6 +47,13 @@ export const sendWelcomeEmail = async (email) => {
       <p>You are now subscribed to Nova Peptide Labs updates.</p>
       <p>Visit the lab:</p>
       <a href="https://novapeptidelabs.org/shop">Explore Research Compounds</a>
+      <hr style="margin:25px 0"/>
+      <p style="font-size:13px;color:#666">
+      NovaPeptideLabs<br/>
+      5504 13th Ave #1013<br/>
+      Brooklyn, NY 11219<br/>
+      United States
+      </p>
     `,
   });
 };
@@ -69,6 +76,13 @@ export const sendOrderConfirmation = async (order, email) => {
       <p>Total: $${order.totalAmount}</p>
       <h3>Items</h3>
       <p>${items}</p>
+      <hr style="margin:25px 0"/>
+      <p style="font-size:13px;color:#666">
+      NovaPeptideLabs<br/>
+      5504 13th Ave #1013<br/>
+      Brooklyn, NY 11219<br/>
+      United States
+      </p>
     `,
   });
 };
