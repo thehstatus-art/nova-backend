@@ -154,8 +154,8 @@ app.post("/api/shipping/rates", async (req, res) => {
       headers: shippoHeaders,
       body: JSON.stringify({
         address_from: {
-          name: "Nova Peptide Labs",
-          street1: "6801 14th ave apt 1",
+          name: "Hansel Crousset",
+          street1: "5504 13th Ave #1013",
           city: "Brooklyn",
           state: "NY",
           zip: "11219",
