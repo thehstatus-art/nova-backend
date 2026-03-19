@@ -37,7 +37,11 @@ const orderSchema = new mongoose.Schema(
       ref: "User"
     },
 
+    email: String,
+
     customerEmail: String,
+
+    paypalOrderId: String,
 
     shippingDetails: {
       name: String,
@@ -46,6 +50,18 @@ const orderSchema = new mongoose.Schema(
       state: String,
       postalCode: String,
       country: String
+    },
+
+    shippingAddress: {
+      name: String,
+      street: String,
+      city: String,
+      state: String,
+      zip: String,
+      country: {
+        type: String,
+        default: "US"
+      }
     },
 
     items: {
@@ -67,13 +83,21 @@ const orderSchema = new mongoose.Schema(
 
     paidAt: Date,
 
+    trackingNumber: String,
+
+    shippingLabelUrl: String,
+
+    deliveredAt: Date,
+
     status: {
       type: String,
       enum: [
         "pending",
         "paid",
+        "processing",
         "shipped",
         "delivered",
+        "completed",
         "cancelled",
         "refunded"
       ],

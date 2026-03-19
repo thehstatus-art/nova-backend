@@ -31,6 +31,25 @@ const emitPurchaseEvent = (req, order) => {
 
 const router = express.Router()
 
+const normalizeShippingDetails = (shippingAddress = {}) => ({
+  name: shippingAddress.name || '',
+  address: shippingAddress.street || '',
+  city: shippingAddress.city || '',
+  state: shippingAddress.state || '',
+  postalCode: shippingAddress.zip || '',
+  country: shippingAddress.country || 'US'
+})
+
+const hasCompleteShippingAddress = (shippingAddress = {}) => {
+  return Boolean(
+    shippingAddress.name &&
+    shippingAddress.street &&
+    shippingAddress.city &&
+    shippingAddress.state &&
+    shippingAddress.zip
+  )
+}
+
 /* ===============================
    STRIPE INITIALIZATION
 ================================ */
@@ -184,6 +203,7 @@ router.post('/checkout', async (req, res) => {
       items: orderItems,
       totalAmount,
       email,
+      customerEmail: email,
       isPaid: false,
       status: 'pending'
     })
@@ -252,16 +272,21 @@ router.post('/', async (req, res) => {
       totalAmount,
       paypalOrderId,
       email,
+      customerEmail: email,
       shippingAddress,
+      shippingDetails: normalizeShippingDetails(shippingAddress),
       isPaid: true,
+      paidAt: new Date(),
       status: 'paid'
     })
 
-    // create Shippo label automatically
-    const labelUrl = await createShippoLabel(order)
-    if (labelUrl) {
-      order.shippingLabelUrl = labelUrl
-      await order.save()
+    if (hasCompleteShippingAddress(shippingAddress)) {
+      const shipment = await createShippoLabel(order)
+      if (shipment) {
+        order.shippingLabelUrl = shipment.labelUrl
+        order.trackingNumber = shipment.trackingNumber
+        await order.save()
+      }
     }
 
     if (email) {
@@ -319,16 +344,21 @@ router.post('/paypal', async (req, res) => {
       totalAmount,
       paypalOrderId,
       email,
+      customerEmail: email,
       shippingAddress,
+      shippingDetails: normalizeShippingDetails(shippingAddress),
       isPaid: true,
+      paidAt: new Date(),
       status: 'paid'
     })
 
-    // create Shippo label automatically
-    const labelUrl = await createShippoLabel(order)
-    if (labelUrl) {
-      order.shippingLabelUrl = labelUrl
-      await order.save()
+    if (hasCompleteShippingAddress(shippingAddress)) {
+      const shipment = await createShippoLabel(order)
+      if (shipment) {
+        order.shippingLabelUrl = shipment.labelUrl
+        order.trackingNumber = shipment.trackingNumber
+        await order.save()
+      }
     }
 
     if (email) {

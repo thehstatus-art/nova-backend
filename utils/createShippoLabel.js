@@ -70,7 +70,10 @@ export const createShippoLabel = async (order) => {
       throw new Error("Shippo label creation failed");
     }
 
-    return transaction.label_url;
+    return {
+      labelUrl: transaction.label_url,
+      trackingNumber: transaction.tracking_number,
+    };
 
   } catch (error) {
     console.error("Shippo label error:", error);
