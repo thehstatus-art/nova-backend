@@ -4,40 +4,37 @@ import { sendEmail } from "../utils/sendEmail.js";
 
 const router = express.Router();
 
+// POST /api/newsletter/broadcast
 router.post("/broadcast", async (req, res) => {
+  try {
+    const { subject, html } = req.body;
 
-  const subscribers = await Subscriber.find();
+    if (!subject || !html) {
+      return res.status(400).json({ error: "Subject and HTML are required" });
+    }
 
-  for (const sub of subscribers) {
+    const subscribers = await Subscriber.find();
 
-    await sendEmail({
-      to: sub.email,
-      subject: "Nova Research Network Update",
-      html: `
-      <div style="font-family:Arial;padding:30px">
+    if (!subscribers.length) {
+      return res.json({ success: true, count: 0, message: "No subscribers" });
+    }
 
-        <img src="https://novapeptidelabs.org/logo.png" width="180"/>
+    // Send emails sequentially (safe for small lists)
+    for (const sub of subscribers) {
+      if (!sub.email) continue;
 
-        <h2>Nova Peptide Labs Research Network</h2>
+      await sendEmail({
+        to: sub.email,
+        subject,
+        html
+      });
+    }
 
-        <p>
-        New research compounds are now available.
-        Our latest laboratory batches have been verified.
-        </p>
-
-        <a href="https://novapeptidelabs.org/shop"
-        style="background:#0ea5e9;color:white;padding:14px 22px;text-decoration:none;border-radius:6px">
-        View Research Catalog
-        </a>
-
-      </div>
-      `
-    });
-
+    res.json({ success: true, count: subscribers.length });
+  } catch (error) {
+    console.error("Newsletter error:", error);
+    res.status(500).json({ error: "Failed to send newsletter" });
   }
-
-  res.json({ success: true });
-
 });
 
 export default router;

@@ -249,7 +249,7 @@ router.post('/', async (req, res) => {
 
     for (const item of items) {
 
-      const product = await Product.findById(item.productId)
+      const product = await Product.findById(item.productId || item.product)
 
       if (!product) continue
 
@@ -319,7 +319,7 @@ router.post('/paypal', async (req, res) => {
 
     for (const item of items) {
 
-      const product = await Product.findById(item.productId)
+      const product = await Product.findById(item.productId || item.product)
 
       if (!product) continue
 

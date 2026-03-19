@@ -9,7 +9,7 @@ const orderItemSchema = new mongoose.Schema(
     },
     name: {
       type: String,
-      required: true
+      required: false
     },
     quantity: {
       type: Number,
@@ -18,7 +18,7 @@ const orderItemSchema = new mongoose.Schema(
     },
     price: {
       type: Number,
-      required: true
+      required: false
     }
   },
   { _id: false }
@@ -71,7 +71,7 @@ const orderSchema = new mongoose.Schema(
 
     totalAmount: {
       type: Number,
-      required: true
+      required: false
     },
 
     stripeSessionId: String,
