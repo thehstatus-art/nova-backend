@@ -160,7 +160,7 @@ const productSchema = new mongoose.Schema(
    AUTO SYNC TOTAL STOCK
 ====================== */
 
-productSchema.pre("save", function (next) {
+productSchema.pre("save", function () {
 
   if (this.batches && this.batches.length > 0) {
 
@@ -170,7 +170,5 @@ productSchema.pre("save", function (next) {
 
     this.stock = total
   }
-
-  next()
 })
 export default mongoose.model("Product", productSchema)

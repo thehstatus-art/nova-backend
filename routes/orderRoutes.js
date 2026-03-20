@@ -241,6 +241,7 @@ router.post('/', async (req, res) => {
   try {
 
     const { items, email, paypalOrderId, totalAmount, shippingAddress } = req.body
+    let computedTotal = 0;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
