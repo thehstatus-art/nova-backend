@@ -12,10 +12,18 @@ console.log("🔥 Auth routes loaded")
 ========================= */
 router.post('/register', async (req, res) => {
   try {
-    const { email, password } = req.body
+    const { email, password, adminSetupKey } = req.body
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password required' })
+    }
+
+    if (!process.env.ADMIN_SETUP_KEY) {
+      return res.status(500).json({ message: 'Admin registration is not configured' })
+    }
+
+    if (adminSetupKey !== process.env.ADMIN_SETUP_KEY) {
+      return res.status(403).json({ message: 'Invalid admin setup key' })
     }
 
     const existingUser = await User.findOne({ email })

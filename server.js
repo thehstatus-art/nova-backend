@@ -15,6 +15,7 @@ import { Server } from "socket.io";
 import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import adminRoutes from "./routes/admin.js";
+import authRoutes from "./routes/authRoutes.js";
 import subscriberRoutes from "./routes/subscriberRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
 import restockRoutes from "./routes/restockRoutes.js";
@@ -101,6 +102,7 @@ mongoose
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/subscribers", subscriberRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/restock", restockRoutes);
