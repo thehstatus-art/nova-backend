@@ -80,7 +80,7 @@ router.post('/login', async (req, res) => {
       return res.status(500).json({ message: 'JWT not configured' })
     }
 
-    console.log("✅ JWT SECRET FOUND:", process.env.JWT_SECRET)
+    console.log("✅ JWT secret loaded")
 
     const token = jwt.sign(
       { id: user._id },

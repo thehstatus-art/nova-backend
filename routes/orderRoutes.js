@@ -241,7 +241,7 @@ router.post('/', async (req, res) => {
   try {
 
     const { items, email, paypalOrderId, totalAmount, shippingAddress } = req.body
-    let computedTotal = 0;
+    let computedTotal = 0
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
@@ -253,7 +253,9 @@ router.post('/', async (req, res) => {
 
       const product = await Product.findById(item.productId || item.product)
 
-      if (!product) continue
+      if (!product) {
+        return res.status(404).json({ message: `Product not found: ${item.productId || item.product}` })
+      }
 
       product.stock -= item.quantity
       if (product.stock < 0) product.stock = 0
@@ -267,6 +269,10 @@ router.post('/', async (req, res) => {
         quantity: item.quantity
       })
       computedTotal += product.price * item.quantity
+    }
+
+    if (orderItems.length === 0) {
+      return res.status(400).json({ message: 'No valid items provided' })
     }
 
     const order = await Order.create({
@@ -327,7 +333,9 @@ router.post('/paypal', async (req, res) => {
 
       const product = await Product.findById(item.productId || item.product)
 
-      if (!product) continue
+      if (!product) {
+        return res.status(404).json({ message: `Product not found: ${item.productId || item.product}` })
+      }
 
       product.stock -= item.quantity
       if (product.stock < 0) product.stock = 0
@@ -343,6 +351,10 @@ router.post('/paypal', async (req, res) => {
 
       totalAmount += product.price * item.quantity
 
+    }
+
+    if (orderItems.length === 0) {
+      return res.status(400).json({ message: 'No valid items provided' })
     }
 
     const order = await Order.create({
