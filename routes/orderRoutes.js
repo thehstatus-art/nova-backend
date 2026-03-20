@@ -165,6 +165,7 @@ router.post('/checkout', async (req, res) => {
 
     let stripeItems = []
     let orderItems = []
+    let computedTotal = 0
     let totalAmount = 0
 
     for (const item of items) {
@@ -264,12 +265,12 @@ router.post('/', async (req, res) => {
         price: product.price,
         quantity: item.quantity
       })
-
+      computedTotal += product.price * item.quantity
     }
 
     const order = await Order.create({
       items: orderItems,
-      totalAmount,
+      totalAmount: totalAmount || computedTotal,
       paypalOrderId,
       email,
       customerEmail: email,
@@ -300,8 +301,12 @@ router.post('/', async (req, res) => {
     res.json({ success: true, orderId: order._id })
 
   } catch (err) {
-    console.error('Generic order save error:', err)
-    res.status(500).json({ message: 'Order save failed' })
+    console.error('🚨 ORDER SAVE ERROR:', err)
+
+    res.status(500).json({
+      message: 'Order save failed',
+      error: err.message
+    })
   }
 })
 
