@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 import Order from "../models/Order.js";
 import Subscriber from "../models/Subscriber.js";
 import { protect, isAdmin } from "../middleware/auth.js";
-import { sendEmail } from "../utils/sendEmail.js";
+import { buildBackInStockNewsletter, sendEmail } from "../utils/sendEmail.js";
 
 const router = express.Router();
 const SHIPPO_API = "https://api.goshippo.com";
@@ -276,26 +276,38 @@ router.get("/orders/:id/label", protect, isAdmin, async (req, res) => {
 
 router.post("/newsletter/send", protect, isAdmin, async (req, res) => {
   try {
+    const {
+      subject,
+      badge,
+      headline,
+      intro,
+      featuredItems,
+      ctaLabel,
+      shopUrl,
+    } = req.body || {};
+
     const subscribers = await Subscriber.find();
 
     if (!subscribers.length) {
       return res.json({ message: "No subscribers found" });
     }
 
+    const newsletter = buildBackInStockNewsletter({
+      subject,
+      badge,
+      headline,
+      intro,
+      featuredItems,
+      ctaLabel,
+      shopUrl,
+    });
+
     for (const sub of subscribers) {
       await sendEmail({
         to: sub.email,
-        subject: "Nova Research Network Update",
-        html: `
-          <div style="font-family:Arial;padding:30px">
-            <h2>Nova Peptide Labs Research Network</h2>
-            <p>New research compounds and verified batches are now available.</p>
-            <a href="https://novapeptidelabs.org/shop"
-            style="background:#0ea5e9;color:white;padding:14px 22px;text-decoration:none;border-radius:6px">
-            View Research Catalog
-            </a>
-          </div>
-        `,
+        subject: newsletter.subject,
+        html: newsletter.html,
+        text: newsletter.text,
       });
     }
 

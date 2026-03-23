@@ -120,6 +120,15 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
 
       await order.save()
 
+      if (hasCompleteShippingAddress(order.shippingAddress) && !order.shippingLabelUrl) {
+        const shipment = await createShippoLabel(order)
+        if (shipment) {
+          order.shippingLabelUrl = shipment.labelUrl
+          order.trackingNumber = shipment.trackingNumber
+          await order.save()
+        }
+      }
+
       try {
 
         if (order.email) {
@@ -157,7 +166,7 @@ router.post('/stripe-webhook', express.raw({ type: 'application/json' }), async 
 router.post('/checkout', async (req, res) => {
   try {
 
-    const { items, email } = req.body
+    const { items, email, shippingAddress } = req.body
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
@@ -205,6 +214,8 @@ router.post('/checkout', async (req, res) => {
       totalAmount,
       email,
       customerEmail: email,
+      shippingAddress,
+      shippingDetails: normalizeShippingDetails(shippingAddress),
       isPaid: false,
       status: 'pending'
     })
@@ -240,8 +251,17 @@ router.post('/checkout', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
 
-    const { items, email, paypalOrderId, totalAmount, shippingAddress } = req.body
+    const {
+      items,
+      email,
+      paypalOrderId,
+      totalAmount,
+      shippingAddress,
+      shippingCost,
+      shippingMethod
+    } = req.body
     let computedTotal = 0
+    const normalizedShippingCost = Math.max(Number(shippingCost) || 0, 0)
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'No items provided' })
@@ -277,7 +297,9 @@ router.post('/', async (req, res) => {
 
     const order = await Order.create({
       items: orderItems,
-      totalAmount: totalAmount || computedTotal,
+      totalAmount: totalAmount || computedTotal + normalizedShippingCost,
+      shippingCost: normalizedShippingCost,
+      shippingMethod,
       paypalOrderId,
       email,
       customerEmail: email,
@@ -324,10 +346,42 @@ router.post('/', async (req, res) => {
 router.post('/paypal', async (req, res) => {
   try {
 
-    const { items, email, paypalOrderId, shippingAddress } = req.body
+    const {
+      items,
+      email,
+      paypalOrderId,
+      shippingAddress,
+      shippingCost,
+      shippingMethod
+    } = req.body
+
+    if (!paypalOrderId) {
+      return res.status(400).json({ message: 'PayPal order ID is required' })
+    }
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: 'No items provided' })
+    }
+
+    const existingOrder = await Order.findOne({ paypalOrderId })
+
+    if (existingOrder) {
+      console.warn('PayPal order already recorded:', {
+        paypalOrderId,
+        orderId: existingOrder._id
+      })
+
+      return res.json({
+        success: true,
+        orderId: existingOrder._id,
+        existingOrder: true
+      })
+    }
 
     let orderItems = []
     let totalAmount = 0
+    const normalizedShippingCost = Math.max(Number(shippingCost) || 0, 0)
+    const productsToUpdate = []
 
     for (const item of items) {
 
@@ -337,15 +391,19 @@ router.post('/paypal', async (req, res) => {
         return res.status(404).json({ message: `Product not found: ${item.productId || item.product}` })
       }
 
-      product.stock -= item.quantity
-      if (product.stock < 0) product.stock = 0
-
-      await product.save()
+      if (product.stock < item.quantity) {
+        return res.status(400).json({ message: `Not enough stock for ${product.name}` })
+      }
 
       orderItems.push({
         product: product._id,
         name: product.name,
         price: product.price,
+        quantity: item.quantity
+      })
+
+      productsToUpdate.push({
+        product,
         quantity: item.quantity
       })
 
@@ -359,7 +417,9 @@ router.post('/paypal', async (req, res) => {
 
     const order = await Order.create({
       items: orderItems,
-      totalAmount,
+      totalAmount: totalAmount + normalizedShippingCost,
+      shippingCost: normalizedShippingCost,
+      shippingMethod,
       paypalOrderId,
       email,
       customerEmail: email,
@@ -370,28 +430,78 @@ router.post('/paypal', async (req, res) => {
       status: 'paid'
     })
 
+    console.log('PayPal order saved to MongoDB:', {
+      orderId: order._id,
+      paypalOrderId,
+      itemCount: order.items.length,
+      totalAmount: order.totalAmount
+    })
+
+    for (const entry of productsToUpdate) {
+      entry.product.stock -= entry.quantity
+      if (entry.product.stock < 0) entry.product.stock = 0
+      await entry.product.save()
+    }
+
     if (hasCompleteShippingAddress(shippingAddress)) {
-      const shipment = await createShippoLabel(order)
-      if (shipment) {
-        order.shippingLabelUrl = shipment.labelUrl
-        order.trackingNumber = shipment.trackingNumber
-        await order.save()
+      try {
+        const shipment = await createShippoLabel(order)
+        if (shipment) {
+          order.shippingLabelUrl = shipment.labelUrl
+          order.trackingNumber = shipment.trackingNumber
+          await order.save()
+        } else {
+          console.warn('Shippo label was not created for PayPal order:', {
+            orderId: order._id,
+            paypalOrderId
+          })
+        }
+      } catch (shippoErr) {
+        console.error('Shippo follow-up failed for PayPal order:', {
+          orderId: order._id,
+          paypalOrderId,
+          error: shippoErr.message
+        })
       }
+    } else {
+      console.warn('PayPal order missing complete shipping address for Shippo:', {
+        orderId: order._id,
+        paypalOrderId
+      })
     }
 
     if (email) {
-      await sendOrderConfirmationEmail(order, email)
+      try {
+        await sendOrderConfirmationEmail(order, email)
+      } catch (mailErr) {
+        console.error('PayPal confirmation email failed:', {
+          orderId: order._id,
+          paypalOrderId,
+          error: mailErr.message
+        })
+      }
     }
 
-    await sendAdminOrderNotification(order)
+    try {
+      await sendAdminOrderNotification(order)
+    } catch (adminMailErr) {
+      console.error('PayPal admin notification failed:', {
+        orderId: order._id,
+        paypalOrderId,
+        error: adminMailErr.message
+      })
+    }
 
     emitPurchaseEvent(req, order)
 
     res.json({ success: true, orderId: order._id })
 
   } catch (err) {
-    console.error('PayPal order error:', err)
-    res.status(500).json({ message: 'PayPal order failed' })
+    console.error('PayPal order error:', {
+      paypalOrderId: req.body?.paypalOrderId,
+      message: err.message
+    })
+    res.status(500).json({ message: 'PayPal order failed', error: err.message })
   }
 })
 

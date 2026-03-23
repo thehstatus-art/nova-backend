@@ -20,6 +20,12 @@ import subscriberRoutes from "./routes/subscriberRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
 import restockRoutes from "./routes/restockRoutes.js";
 import Order from "./models/Order.js";
+import Product from "./models/Product.js";
+import {
+  sendAdminOrderNotification,
+  sendOrderConfirmationEmail,
+} from "./utils/sendEmail.js";
+import { createShippoLabel } from "./utils/createShippoLabel.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -47,6 +53,32 @@ io.on("connection", (socket) => {
   console.log("⚡ Client connected for live notifications");
 });
 
+const emitPurchaseEvent = (order) => {
+  try {
+    const firstItem = order.items?.[0];
+
+    io.emit("purchase", {
+      product: firstItem?.name || "Research Compound",
+      location: "USA",
+      time: new Date(),
+    });
+
+    io.emit("new-order", order);
+  } catch (err) {
+    console.error("Socket emit failed:", err);
+  }
+};
+
+const hasCompleteShippingAddress = (shippingAddress = {}) => {
+  return Boolean(
+    shippingAddress.name &&
+    shippingAddress.street &&
+    shippingAddress.city &&
+    shippingAddress.state &&
+    shippingAddress.zip
+  );
+};
+
 /* ================= STRIPE WEBHOOK ================= */
 
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
@@ -70,8 +102,62 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 
     console.log("💰 Stripe payment completed:", session.id);
 
-    // TODO: update the corresponding order in MongoDB
-    // mark order as paid and reduce inventory
+    try {
+      const order = await Order.findOne({ stripeSessionId: session.id });
+
+      if (!order) {
+        console.warn("Stripe order not found for session:", session.id);
+        return res.json({ received: true });
+      }
+
+      if (order.isPaid) {
+        return res.json({ received: true });
+      }
+
+      order.isPaid = true;
+      order.status = "paid";
+      order.paidAt = new Date();
+
+      for (const item of order.items) {
+        const product = await Product.findById(item.product);
+
+        if (!product) continue;
+
+        product.stock -= item.quantity;
+        if (product.stock < 0) product.stock = 0;
+
+        await product.save();
+      }
+
+      await order.save();
+
+      if (hasCompleteShippingAddress(order.shippingAddress) && !order.shippingLabelUrl) {
+        const shipment = await createShippoLabel(order);
+
+        if (shipment) {
+          order.shippingLabelUrl = shipment.labelUrl;
+          order.trackingNumber = shipment.trackingNumber;
+          await order.save();
+        }
+      }
+
+      const orderEmail = order.email || order.customerEmail;
+
+      try {
+        if (orderEmail) {
+          await sendOrderConfirmationEmail(order, orderEmail);
+        }
+
+        await sendAdminOrderNotification(order);
+      } catch (mailErr) {
+        console.error("Stripe webhook email notification error:", mailErr);
+      }
+
+      emitPurchaseEvent(order);
+    } catch (err) {
+      console.error("Stripe webhook processing error:", err);
+      return res.status(500).json({ message: "Webhook processing failed" });
+    }
   }
 
   res.json({ received: true });
@@ -141,6 +227,32 @@ const shippoHeaders = {
   "Content-Type": "application/json",
 };
 
+const buildRateAddress = (shippingAddress = {}) => ({
+  name: shippingAddress.name || "Customer",
+  street1: shippingAddress.street || shippingAddress.address || undefined,
+  city: shippingAddress.city || undefined,
+  state: shippingAddress.state || undefined,
+  zip: shippingAddress.zip || shippingAddress.postalCode || undefined,
+  country: shippingAddress.country || "US",
+});
+
+const buildEstimatedParcel = (items = []) => {
+  const totalUnits = Array.isArray(items)
+    ? items.reduce((sum, item) => sum + Math.max(Number(item.quantity) || 0, 0), 0)
+    : 0;
+
+  const safeUnits = Math.max(totalUnits, 1);
+
+  return {
+    length: safeUnits >= 6 ? "8" : safeUnits >= 3 ? "7" : "6",
+    width: safeUnits >= 6 ? "6" : "4",
+    height: safeUnits >= 6 ? "4" : safeUnits >= 3 ? "3" : "2",
+    distance_unit: "in",
+    weight: (0.35 + safeUnits * 0.18).toFixed(2),
+    mass_unit: "lb",
+  };
+};
+
 /* ================= SHIPPING RATES ================= */
 
 app.post("/api/shipping/rates", async (req, res) => {
@@ -148,9 +260,13 @@ app.post("/api/shipping/rates", async (req, res) => {
     if (!process.env.SHIPPO_API_KEY)
       return res.status(400).json({ message: "Shipping not active" });
 
-    const { zip } = req.body;
+    const { zip, shippingAddress, items } = req.body;
+    const addressTo = buildRateAddress({
+      ...(shippingAddress || {}),
+      zip: shippingAddress?.zip || zip,
+    });
 
-    if (!zip)
+    if (!addressTo.zip)
       return res.status(400).json({ message: "ZIP code required" });
 
     const shipmentRes = await fetch(`${SHIPPO_API}/shipments/`, {
@@ -165,20 +281,8 @@ app.post("/api/shipping/rates", async (req, res) => {
           zip: "11219",
           country: "US",
         },
-        address_to: {
-          zip: zip,
-          country: "US",
-        },
-        parcels: [
-          {
-            length: "6",
-            width: "4",
-            height: "2",
-            distance_unit: "in",
-            weight: "0.5",
-            mass_unit: "lb",
-          },
-        ],
+        address_to: addressTo,
+        parcels: [buildEstimatedParcel(items)],
         async: false,
       }),
     });

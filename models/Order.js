@@ -74,6 +74,13 @@ const orderSchema = new mongoose.Schema(
       required: false
     },
 
+    shippingCost: {
+      type: Number,
+      default: 0
+    },
+
+    shippingMethod: String,
+
     stripeSessionId: String,
 
     isPaid: {
