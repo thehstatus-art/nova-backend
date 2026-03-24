@@ -2,7 +2,7 @@ import express from "express";
 import fetch from "node-fetch";
 import Order from "../models/Order.js";
 import { protect, isAdmin } from "../middleware/auth.js";
-import { buildBackInStockNewsletter, sendEmail } from "../utils/sendEmail.js";
+import { buildBackInStockNewsletter, sendNewsletterBlast } from "../utils/sendEmail.js";
 import { loadAllSubscribers } from "../utils/subscriberLookup.js";
 
 const router = express.Router();
@@ -302,16 +302,21 @@ router.post("/newsletter/send", protect, isAdmin, async (req, res) => {
       shopUrl,
     });
 
-    for (const sub of subscribers) {
-      await sendEmail({
-        to: sub.email,
-        subject: newsletter.subject,
-        html: newsletter.html,
-        text: newsletter.text,
-      });
+    const emails = subscribers
+      .map((sub) => sub.email)
+      .filter(Boolean);
+
+    const sent = await sendNewsletterBlast(
+      emails,
+      newsletter.subject,
+      newsletter.html
+    );
+
+    if (!sent) {
+      return res.status(500).json({ message: "Failed to send newsletter" });
     }
 
-    res.json({ message: `Newsletter sent to ${subscribers.length} subscribers` });
+    res.json({ message: `Newsletter sent to ${emails.length} subscribers` });
   } catch (err) {
     console.error("Newsletter send error:", err);
     res.status(500).json({ message: "Failed to send newsletter" });

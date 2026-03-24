@@ -316,7 +316,7 @@ United States`;
 ================================ */
 
 export const sendNewsletterBlast = async (emails, subject, contentHtml) => {
-  if (!emails || emails.length === 0) return;
+  if (!emails || emails.length === 0) return false;
 
   try {
     await transporter.sendMail({
@@ -328,8 +328,10 @@ export const sendNewsletterBlast = async (emails, subject, contentHtml) => {
     });
 
     console.log("📢 Newsletter sent to subscribers");
+    return true;
   } catch (error) {
     console.error("❌ Newsletter failed:", error);
+    return false;
   }
 };
 
