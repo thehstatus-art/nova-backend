@@ -17,6 +17,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import adminRoutes from "./routes/admin.js";
 import authRoutes from "./routes/authRoutes.js";
 import subscriberRoutes from "./routes/subscriberRoutes.js";
+import emailRoutes from "./routes/emailRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
 import restockRoutes from "./routes/restockRoutes.js";
 import Order from "./models/Order.js";
@@ -190,6 +191,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/subscribers", subscriberRoutes);
+app.use("/api/email", emailRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/restock", restockRoutes);
 

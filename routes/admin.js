@@ -1,9 +1,9 @@
 import express from "express";
 import fetch from "node-fetch";
 import Order from "../models/Order.js";
-import Subscriber from "../models/Subscriber.js";
 import { protect, isAdmin } from "../middleware/auth.js";
 import { buildBackInStockNewsletter, sendEmail } from "../utils/sendEmail.js";
+import { loadAllSubscribers } from "../utils/subscriberLookup.js";
 
 const router = express.Router();
 const SHIPPO_API = "https://api.goshippo.com";
@@ -286,7 +286,7 @@ router.post("/newsletter/send", protect, isAdmin, async (req, res) => {
       shopUrl,
     } = req.body || {};
 
-    const subscribers = await Subscriber.find();
+    const subscribers = await loadAllSubscribers();
 
     if (!subscribers.length) {
       return res.json({ message: "No subscribers found" });

@@ -1,6 +1,6 @@
 import express from "express";
-import Subscriber from "../models/Subscriber.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { loadAllSubscribers } from "../utils/subscriberLookup.js";
 
 const router = express.Router();
 
@@ -13,7 +13,7 @@ router.post("/broadcast", async (req, res) => {
       return res.status(400).json({ error: "Subject and HTML are required" });
     }
 
-    const subscribers = await Subscriber.find();
+    const subscribers = await loadAllSubscribers();
 
     if (!subscribers.length) {
       return res.json({ success: true, count: 0, message: "No subscribers" });

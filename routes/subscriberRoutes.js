@@ -1,6 +1,7 @@
 import express from "express";
 import Subscriber from "../models/Subscriber.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { countAllSubscribers, loadAllSubscribers } from "../utils/subscriberLookup.js";
 
 const router = express.Router();
 
@@ -67,7 +68,7 @@ router.post("/subscribe", async (req, res) => {
 // GET SUBSCRIBER COUNT (for live ticker)
 router.get("/count", async (req, res) => {
   try {
-    const count = await Subscriber.countDocuments();
+    const count = await countAllSubscribers();
     res.json({ count });
   } catch (err) {
     res.status(500).json({ message: "Failed to get count" });
@@ -78,7 +79,7 @@ router.get("/count", async (req, res) => {
 // SEND NEWSLETTER TO ALL SUBSCRIBERS
 router.post("/send-newsletter", async (req, res) => {
   try {
-    const subscribers = await Subscriber.find();
+    const subscribers = await loadAllSubscribers();
 
     for (const sub of subscribers) {
       await sendEmail({
