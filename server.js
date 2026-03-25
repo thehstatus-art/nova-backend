@@ -172,7 +172,18 @@ app.use(cors({
   credentials: true
 }));
 app.use(helmet());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: "Too many requests. Please wait a few minutes and try again."
+  },
+  handler: (req, res, next, options) => {
+    return res.status(options.statusCode).json(options.message);
+  }
+}));
 
 /* ================= DATABASE ================= */
 
