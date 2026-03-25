@@ -14,6 +14,19 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+export const verifyEmailTransport = async () => {
+  try {
+    await transporter.verify();
+    return { ok: true };
+  } catch (error) {
+    console.error("❌ Email transport verification failed:", error);
+    return {
+      ok: false,
+      error: error?.message || "Unknown email transport error",
+    };
+  }
+};
+
 /* ===============================
    GENERIC EMAIL SENDER
 ================================ */

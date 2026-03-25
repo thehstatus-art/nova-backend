@@ -2,7 +2,12 @@ import express from "express";
 import fetch from "node-fetch";
 import Order from "../models/Order.js";
 import { protect, isAdmin } from "../middleware/auth.js";
-import { buildBackInStockNewsletter, sendEmail, sendNewsletterBlast } from "../utils/sendEmail.js";
+import {
+  buildBackInStockNewsletter,
+  sendEmail,
+  sendNewsletterBlast,
+  verifyEmailTransport,
+} from "../utils/sendEmail.js";
 import { loadAllSubscribers } from "../utils/subscriberLookup.js";
 
 const router = express.Router();
@@ -361,6 +366,32 @@ router.post("/newsletter/test", protect, isAdmin, async (req, res) => {
   } catch (err) {
     console.error("Newsletter test send error:", err);
     res.status(500).json({ message: "Failed to send test newsletter" });
+  }
+});
+
+router.get("/newsletter/health", protect, isAdmin, async (req, res) => {
+  try {
+    const transport = await verifyEmailTransport();
+
+    if (!transport.ok) {
+      return res.status(500).json({
+        ok: false,
+        message: "Email transport verification failed",
+        error: transport.error,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "Email transport is configured and reachable",
+    });
+  } catch (err) {
+    console.error("Newsletter health check error:", err);
+    return res.status(500).json({
+      ok: false,
+      message: "Email health check failed",
+      error: err.message,
+    });
   }
 });
 
