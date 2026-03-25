@@ -346,12 +346,16 @@ router.post("/newsletter/test", protect, isAdmin, async (req, res) => {
       shopUrl,
     });
 
-    await sendEmail({
+    const sent = await sendEmail({
       to: email,
       subject: newsletter.subject,
       html: newsletter.html,
       text: newsletter.text,
     });
+
+    if (!sent) {
+      return res.status(500).json({ message: "Failed to send test newsletter" });
+    }
 
     res.json({ message: `Test newsletter sent to ${email}` });
   } catch (err) {

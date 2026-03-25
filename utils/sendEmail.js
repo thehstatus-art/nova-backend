@@ -29,8 +29,10 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     });
 
     console.log("📧 Email sent:", to);
+    return true;
   } catch (error) {
     console.error("❌ Email failed:", error);
+    return false;
   }
 };
 
