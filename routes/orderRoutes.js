@@ -1,4 +1,5 @@
 import express from 'express'
+import fetch from 'node-fetch'
 import Stripe from 'stripe'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
@@ -31,6 +32,8 @@ const emitPurchaseEvent = (req, order) => {
 
 const router = express.Router()
 
+const PAYPAL_API_BASE = process.env.PAYPAL_API_BASE || 'https://api-m.paypal.com'
+
 const normalizeShippingDetails = (shippingAddress = {}) => ({
   name: shippingAddress.name || '',
   address: shippingAddress.street || '',
@@ -48,6 +51,71 @@ const hasCompleteShippingAddress = (shippingAddress = {}) => {
     shippingAddress.state &&
     shippingAddress.zip
   )
+}
+
+const formatCurrencyAmount = (value) => Number(value || 0).toFixed(2)
+
+const getPayPalAccessToken = async () => {
+  const clientId = process.env.PAYPAL_CLIENT_ID
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET
+
+  if (!clientId || !clientSecret) {
+    throw new Error('PayPal server credentials are not configured')
+  }
+
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+  const tokenRes = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'grant_type=client_credentials'
+  })
+
+  if (!tokenRes.ok) {
+    const errorText = await tokenRes.text()
+    throw new Error(`PayPal auth failed (${tokenRes.status}): ${errorText}`)
+  }
+
+  const tokenData = await tokenRes.json()
+  return tokenData.access_token
+}
+
+const getPayPalOrderDetails = async (paypalOrderId) => {
+  const accessToken = await getPayPalAccessToken()
+  const orderRes = await fetch(`${PAYPAL_API_BASE}/v2/checkout/orders/${paypalOrderId}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    }
+  })
+
+  if (!orderRes.ok) {
+    const errorText = await orderRes.text()
+    throw new Error(`PayPal order lookup failed (${orderRes.status}): ${errorText}`)
+  }
+
+  return orderRes.json()
+}
+
+const summarizeCompletedCaptures = (paypalOrder) => {
+  const completedCaptures = (paypalOrder.purchase_units || []).flatMap((unit) =>
+    (unit.payments?.captures || []).filter((capture) => capture.status === 'COMPLETED')
+  )
+
+  const totalCaptured = completedCaptures.reduce(
+    (sum, capture) => sum + Number(capture.amount?.value || 0),
+    0
+  )
+
+  const currency = completedCaptures[0]?.amount?.currency_code
+
+  return {
+    completedCaptures,
+    totalCaptured,
+    currency
+  }
 }
 
 /* ===============================
@@ -415,14 +483,48 @@ router.post('/paypal', async (req, res) => {
       return res.status(400).json({ message: 'No valid items provided' })
     }
 
+    const expectedTotal = totalAmount + normalizedShippingCost
+    const paypalOrder = await getPayPalOrderDetails(paypalOrderId)
+    const { completedCaptures, totalCaptured, currency } = summarizeCompletedCaptures(paypalOrder)
+
+    if (paypalOrder.status !== 'COMPLETED' || completedCaptures.length === 0) {
+      return res.status(400).json({
+        message: 'PayPal payment has not been fully captured'
+      })
+    }
+
+    if (currency && currency !== 'USD') {
+      return res.status(400).json({
+        message: `Unexpected PayPal currency: ${currency}`
+      })
+    }
+
+    if (formatCurrencyAmount(totalCaptured) !== formatCurrencyAmount(expectedTotal)) {
+      console.error('PayPal amount mismatch:', {
+        paypalOrderId,
+        expectedTotal: formatCurrencyAmount(expectedTotal),
+        capturedTotal: formatCurrencyAmount(totalCaptured)
+      })
+
+      return res.status(400).json({
+        message: 'PayPal payment amount did not match the order total'
+      })
+    }
+
+    const paypalEmail =
+      paypalOrder.payer?.email_address ||
+      paypalOrder.payment_source?.paypal?.email_address ||
+      email ||
+      ''
+
     const order = await Order.create({
       items: orderItems,
-      totalAmount: totalAmount + normalizedShippingCost,
+      totalAmount: expectedTotal,
       shippingCost: normalizedShippingCost,
       shippingMethod,
       paypalOrderId,
-      email,
-      customerEmail: email,
+      email: paypalEmail,
+      customerEmail: paypalEmail,
       shippingAddress,
       shippingDetails: normalizeShippingDetails(shippingAddress),
       isPaid: true,
@@ -470,9 +572,9 @@ router.post('/paypal', async (req, res) => {
       })
     }
 
-    if (email) {
+    if (paypalEmail) {
       try {
-        await sendOrderConfirmationEmail(order, email)
+        await sendOrderConfirmationEmail(order, paypalEmail)
       } catch (mailErr) {
         console.error('PayPal confirmation email failed:', {
           orderId: order._id,
