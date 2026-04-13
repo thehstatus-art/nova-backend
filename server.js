@@ -45,10 +45,18 @@ const allowedOrigins = [
   process.env.CLIENT_URL
 ].filter(Boolean);
 
+const allowedOriginPatterns = [
+  /^https:\/\/novapeptidelabs-frontend(?:-[a-z0-9-]+)?\.vercel\.app$/i
+];
+
 const corsOptions = {
   origin(origin, callback) {
     // Allow browser-less tools and approved frontend origins.
-    if (!origin || allowedOrigins.includes(origin)) {
+    const isAllowedPreview = allowedOriginPatterns.some((pattern) =>
+      pattern.test(origin || "")
+    );
+
+    if (!origin || allowedOrigins.includes(origin) || isAllowedPreview) {
       return callback(null, true);
     }
 
