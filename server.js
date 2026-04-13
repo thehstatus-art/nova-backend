@@ -36,14 +36,31 @@ const server = http.createServer(app);
 
 const allowedOrigins = [
   "https://novapeptidelabs.org",
-  "https://www.novapeptidelabs.org"
-];
+  "https://www.novapeptidelabs.org",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL
+].filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow browser-less tools and approved frontend origins.
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Origin not allowed by CORS: ${origin}`));
+  },
+  credentials: true
+};
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-    credentials: true
+    ...corsOptions,
+    methods: ["GET", "POST"]
   }
 });
 
@@ -167,10 +184,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 /* ================= BASIC MIDDLEWARE ================= */
 
 app.use(express.json());
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+app.use(cors(corsOptions));
 app.use(helmet());
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
