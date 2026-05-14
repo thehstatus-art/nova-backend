@@ -47,6 +47,12 @@ const orderSchema = new mongoose.Schema(
       sparse: true
     },
 
+    paypalCaptureId: {
+      type: String,
+      unique: true,
+      sparse: true
+    },
+
     shippingDetails: {
       name: String,
       address: String,

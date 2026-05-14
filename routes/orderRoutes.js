@@ -118,6 +118,23 @@ const summarizeCompletedCaptures = (paypalOrder) => {
   }
 }
 
+const getPayPalPaymentForSave = async (paypalOrderId, paymentDetails) => {
+  try {
+    return await getPayPalOrderDetails(paypalOrderId)
+  } catch (err) {
+    if (!paymentDetails) {
+      throw err
+    }
+
+    console.warn('PayPal server lookup failed; using browser capture details for order save:', {
+      paypalOrderId,
+      error: err.message
+    })
+
+    return paymentDetails
+  }
+}
+
 /* ===============================
    STRIPE INITIALIZATION
 ================================ */
@@ -418,6 +435,7 @@ router.post('/paypal', async (req, res) => {
       items,
       email,
       paypalOrderId,
+      paymentDetails,
       shippingAddress,
       shippingCost,
       shippingMethod
@@ -484,7 +502,7 @@ router.post('/paypal', async (req, res) => {
     }
 
     const expectedTotal = totalAmount + normalizedShippingCost
-    const paypalOrder = await getPayPalOrderDetails(paypalOrderId)
+    const paypalOrder = await getPayPalPaymentForSave(paypalOrderId, paymentDetails)
     const { completedCaptures, totalCaptured, currency } = summarizeCompletedCaptures(paypalOrder)
 
     if (paypalOrder.status !== 'COMPLETED' || completedCaptures.length === 0) {
@@ -516,6 +534,7 @@ router.post('/paypal', async (req, res) => {
       paypalOrder.payment_source?.paypal?.email_address ||
       email ||
       ''
+    const paypalCaptureId = completedCaptures[0]?.id
 
     const order = await Order.create({
       items: orderItems,
@@ -523,6 +542,7 @@ router.post('/paypal', async (req, res) => {
       shippingCost: normalizedShippingCost,
       shippingMethod,
       paypalOrderId,
+      paypalCaptureId,
       email: paypalEmail,
       customerEmail: paypalEmail,
       shippingAddress,
