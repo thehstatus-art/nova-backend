@@ -41,7 +41,11 @@ const orderSchema = new mongoose.Schema(
 
     customerEmail: String,
 
-    paypalOrderId: String,
+    paypalOrderId: {
+      type: String,
+      unique: true,
+      sparse: true
+    },
 
     shippingDetails: {
       name: String,
